@@ -1,0 +1,124 @@
+# =====================================================
+# Supabase Local Development Configuration
+# =====================================================
+# This file configures the Supabase CLI for local development.
+# Documentation: https://supabase.com/docs/guides/cli/config
+# =====================================================
+
+[project]
+# A string used to distinguish different Supabase projects on the same host.
+# Defaults to the working directory name when running `supabase init`.
+name = "ai-comerc-lead-generator"
+
+[api]
+# Port to use for the API URL.
+port = 54321
+# Schemas to expose in your API. Tables, views and stored procedures in this schema will get API endpoints.
+schemas = ["public", "storage"]
+# Extra schemas to add to the search_path of every request.
+extra_search_path = ["public"]
+# The maximum number of rows that can be returned in a single request.
+max_rows = 1000
+
+[db]
+# Port to use for the local database URL.
+port = 54322
+# The database major version to use.
+major_version = 15
+
+[studio]
+# Port to use for Supabase Studio.
+port = 54323
+
+[inbucket]
+# Port to use for the email testing server (Inbucket).
+port = 54324
+
+[storage]
+# The maximum file size allowed (e.g. "5MB", "500KB").
+file_size_limit = "50MiB"
+
+[auth]
+# The base URL of your website. Used as an allow-list for redirects and for constructing URLs used in emails.
+site_url = "http://localhost:3000"
+
+# A list of *exact* URLs that auth providers are permitted to redirect to post authentication.
+additional_redirect_urls = ["http://localhost:3000/auth/callback"]
+
+# How long tokens are valid for, in seconds. Defaults to 3600 (1 hour), maximum 604,800 seconds (one week).
+jwt_expiry = 3600
+
+# Allow/disallow new user signups to your project.
+enable_signup = true
+
+[auth.email]
+# Allow/disallow new user signups via email to your project.
+enable_signup = true
+# If enabled, a user will be required to confirm any email change on both the old, and new email addresses.
+# If disabled, only the new email is required to confirm.
+double_confirm_changes = true
+# If enabled, users need to confirm their email address before signing in.
+enable_confirmations = false
+
+# =====================================================
+# Email Templates
+# =====================================================
+# Customize email templates sent by Supabase Auth
+# Templates support variables like {{ .ConfirmationURL }}, {{ .Email }}, etc.
+
+[auth.email.template.invite]
+subject = "You have been invited to {{ .SiteName }}"
+content_path = "./supabase/templates/invite.html"
+
+[auth.email.template.confirmation]
+subject = "Confirm Your Email for {{ .SiteName }}"
+content_path = "./supabase/templates/confirmation.html"
+
+[auth.email.template.recovery]
+subject = "Reset Your Password for {{ .SiteName }}"
+content_path = "./supabase/templates/recovery.html"
+
+[auth.email.template.magic_link]
+subject = "Your Magic Link for {{ .SiteName }}"
+content_path = "./supabase/templates/magic_link.html"
+
+[auth.email.template.email_change]
+subject = "Confirm Email Change for {{ .SiteName }}"
+content_path = "./supabase/templates/email_change.html"
+
+# =====================================================
+# External OAuth Providers
+# =====================================================
+# Configure OAuth providers for social authentication
+# Add your client IDs and secrets in .env.local
+
+[auth.external.google]
+enabled = false
+client_id = ""
+secret = ""
+
+[auth.external.github]
+enabled = false
+client_id = ""
+secret = ""
+
+[auth.external.azure]
+enabled = false
+client_id = ""
+secret = ""
+
+# =====================================================
+# Analytics & Monitoring
+# =====================================================
+
+[analytics]
+enabled = false
+
+# =====================================================
+# Local Development Settings
+# =====================================================
+
+[local]
+# Path to the SQL dump file that will be used to initialize the database.
+# If specified, the SQL file will be executed before applying migrations.
+# seed_path = "./supabase/seed.sql"

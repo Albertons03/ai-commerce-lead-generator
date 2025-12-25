@@ -1,0 +1,116 @@
+import { redirect } from 'next/navigation'
+import { createServerSupabaseClient } from '@/lib/supabase/client'
+import { getUserOrganizations } from '@/lib/supabase/helpers'
+import Link from 'next/link'
+import { Button } from '@/components/ui/button'
+import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card'
+import { Plus, Building2 } from 'lucide-react'
+
+export default async function DashboardHomePage() {
+  const supabase = createServerSupabaseClient()
+
+  // Check authentication
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) {
+    redirect('/login')
+  }
+
+  // Get user's organizations
+  const { data: orgs, error } = await getUserOrganizations(supabase)
+
+  if (error || !orgs) {
+    return (
+      <div className="min-h-screen bg-bg-primary flex items-center justify-center p-4">
+        <Card className="max-w-md">
+          <CardHeader>
+            <CardTitle>Error Loading Organizations</CardTitle>
+            <CardDescription>
+              We couldn't load your organizations. Please try refreshing the page.
+            </CardDescription>
+          </CardHeader>
+        </Card>
+      </div>
+    )
+  }
+
+  // If user has exactly one organization, redirect to it
+  if (orgs.length === 1) {
+    redirect(`/${orgs[0].organization_slug}`)
+  }
+
+  // If user has no organizations, show create organization prompt
+  if (orgs.length === 0) {
+    return (
+      <div className="min-h-screen bg-bg-primary flex items-center justify-center p-4">
+        <Card className="max-w-md">
+          <CardHeader>
+            <CardTitle>Welcome! Create Your First Organization</CardTitle>
+            <CardDescription>
+              Get started by creating your first organization to manage leads and access AI-powered features.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <Link href="/dashboard/create-organization">
+              <Button className="w-full" size="lg">
+                <Plus className="mr-2 h-5 w-5" />
+                Create Organization
+              </Button>
+            </Link>
+          </CardContent>
+        </Card>
+      </div>
+    )
+  }
+
+  // If user has multiple organizations, show organization selector
+  return (
+    <div className="min-h-screen bg-bg-primary p-8">
+      <div className="max-w-4xl mx-auto space-y-8">
+        <div>
+          <h1 className="text-3xl font-bold text-white">Select an Organization</h1>
+          <p className="text-gray-400 mt-2">
+            Choose which organization you'd like to work with
+          </p>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          {orgs.map((org) => (
+            <Link key={org.organization_id} href={`/${org.organization_slug}`}>
+              <Card className="hover:border-primary-500 transition-colors cursor-pointer h-full">
+                <CardHeader>
+                  <div className="flex items-start justify-between">
+                    <div className="flex items-center gap-3">
+                      <div className="h-12 w-12 rounded-lg bg-gradient-hero flex items-center justify-center">
+                        <Building2 className="h-6 w-6 text-white" />
+                      </div>
+                      <div>
+                        <CardTitle>{org.organization_name}</CardTitle>
+                        <p className="text-xs text-gray-400 mt-1">
+                          {org.user_role.charAt(0).toUpperCase() + org.user_role.slice(1)}
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                  {org.organization_description && (
+                    <CardDescription className="mt-4">
+                      {org.organization_description}
+                    </CardDescription>
+                  )}
+                </CardHeader>
+              </Card>
+            </Link>
+          ))}
+
+          <Link href="/dashboard/create-organization">
+            <Card className="border-dashed hover:border-primary-500 hover:bg-bg-elevated transition-colors cursor-pointer h-full flex items-center justify-center min-h-[140px]">
+              <CardContent className="flex flex-col items-center justify-center py-8">
+                <Plus className="h-12 w-12 text-gray-400 mb-2" />
+                <p className="text-gray-400 font-medium">Create New Organization</p>
+              </CardContent>
+            </Card>
+          </Link>
+        </div>
+      </div>
+    </div>
+  )
+}

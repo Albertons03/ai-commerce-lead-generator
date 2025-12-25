@@ -199,17 +199,15 @@ export async function batchUpsertEmbeddings(
 ): Promise<BatchUpsertResult> {
   const supabase = getServiceRoleClient();
 
-  // Check which products already exist if not overwriting
-  let existingProductIds = new Set<string>();
-  if (!overwriteExisting) {
-    const existing = await getExistingEmbeddings(
-      organizationId,
-      embeddingResults.map((r) => r.product_id)
-    );
-    existingProductIds = new Set(existing.keys());
-  }
+  // Always check which products already exist (for accurate inserted/updated counts)
+  const existing = await getExistingEmbeddings(
+    organizationId,
+    embeddingResults.map((r) => r.product_id)
+  );
+  const existingProductIds = new Set(existing.keys());
 
   // Prepare upsert data
+  // If not overwriting, skip products that already exist
   const upsertData = embeddingResults
     .filter((result) => overwriteExisting || !existingProductIds.has(result.product_id))
     .map((result) => {

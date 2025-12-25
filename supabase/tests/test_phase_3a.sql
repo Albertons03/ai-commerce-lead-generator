@@ -7,78 +7,125 @@
 -- Run this script in Supabase SQL Editor to verify setup
 -- =====================================================
 
--- Test 1: Verify pgvector extension is enabled
-SELECT
-    'Test 1: pgvector Extension' AS test_name,
-    CASE
-        WHEN EXISTS (SELECT 1 FROM pg_extension WHERE extname = 'vector')
-        THEN '✓ PASS'
-        ELSE '✗ FAIL'
-    END AS status;
+-- =====================================================
+-- TEST RESULTS TABLE
+-- =====================================================
+-- All tests will be combined into a single result set
+WITH test_results AS (
+    -- Test 1: Verify pgvector extension is enabled
+    SELECT
+        1 AS test_order,
+        'Test 1: pgvector Extension' AS test_name,
+        CASE
+            WHEN EXISTS (SELECT 1 FROM pg_extension WHERE extname = 'vector')
+            THEN '✓ PASS'
+            ELSE '✗ FAIL'
+        END AS status
 
--- Test 2: Verify all tables exist
-SELECT
-    'Test 2: Tables Created' AS test_name,
-    CASE
-        WHEN EXISTS (SELECT 1 FROM pg_tables WHERE schemaname = 'public' AND tablename = 'product_embeddings')
-        AND EXISTS (SELECT 1 FROM pg_tables WHERE schemaname = 'public' AND tablename = 'conversations')
-        AND EXISTS (SELECT 1 FROM pg_tables WHERE schemaname = 'public' AND tablename = 'messages')
-        THEN '✓ PASS (3 tables)'
-        ELSE '✗ FAIL'
-    END AS status;
+    UNION ALL
 
--- Test 3: Verify enum types exist
-SELECT
-    'Test 3: Enum Types Created' AS test_name,
-    CASE
-        WHEN EXISTS (SELECT 1 FROM pg_type WHERE typname = 'conversation_status')
-        AND EXISTS (SELECT 1 FROM pg_type WHERE typname = 'conversation_intent')
-        AND EXISTS (SELECT 1 FROM pg_type WHERE typname = 'conversation_sentiment')
-        AND EXISTS (SELECT 1 FROM pg_type WHERE typname = 'message_role')
-        THEN '✓ PASS (4 enums)'
-        ELSE '✗ FAIL'
-    END AS status;
+    -- Test 2: Verify all tables exist
+    SELECT
+        2 AS test_order,
+        'Test 2: Tables Created' AS test_name,
+        CASE
+            WHEN EXISTS (SELECT 1 FROM pg_tables WHERE schemaname = 'public' AND tablename = 'product_embeddings')
+            AND EXISTS (SELECT 1 FROM pg_tables WHERE schemaname = 'public' AND tablename = 'conversations')
+            AND EXISTS (SELECT 1 FROM pg_tables WHERE schemaname = 'public' AND tablename = 'messages')
+            THEN '✓ PASS (3 tables)'
+            ELSE '✗ FAIL'
+        END AS status
 
--- Test 4: Verify HNSW vector index exists
-SELECT
-    'Test 4: HNSW Vector Index' AS test_name,
-    CASE
-        WHEN EXISTS (
-            SELECT 1 FROM pg_indexes
-            WHERE schemaname = 'public'
-            AND tablename = 'product_embeddings'
-            AND indexname = 'idx_product_embeddings_vector'
-        )
-        THEN '✓ PASS'
-        ELSE '✗ FAIL'
-    END AS status;
+    UNION ALL
 
--- Test 5: Verify helper functions exist
-SELECT
-    'Test 5: Helper Functions' AS test_name,
-    CASE
-        WHEN EXISTS (SELECT 1 FROM pg_proc WHERE proname = 'search_products_by_embedding')
-        AND EXISTS (SELECT 1 FROM pg_proc WHERE proname = 'get_conversation_history')
-        AND EXISTS (SELECT 1 FROM pg_proc WHERE proname = 'get_conversation_stats')
-        THEN '✓ PASS (3 functions)'
-        ELSE '✗ FAIL'
-    END AS status;
+    -- Test 3: Verify enum types exist
+    SELECT
+        3 AS test_order,
+        'Test 3: Enum Types Created' AS test_name,
+        CASE
+            WHEN EXISTS (SELECT 1 FROM pg_type WHERE typname = 'conversation_status')
+            AND EXISTS (SELECT 1 FROM pg_type WHERE typname = 'conversation_intent')
+            AND EXISTS (SELECT 1 FROM pg_type WHERE typname = 'conversation_sentiment')
+            AND EXISTS (SELECT 1 FROM pg_type WHERE typname = 'message_role')
+            THEN '✓ PASS (4 enums)'
+            ELSE '✗ FAIL'
+        END AS status
 
--- Test 6: Verify triggers exist
-SELECT
-    'Test 6: Triggers Created' AS test_name,
-    CASE
-        WHEN EXISTS (
-            SELECT 1 FROM pg_trigger
-            WHERE tgname = 'update_product_embeddings_updated_at'
-        )
-        AND EXISTS (
-            SELECT 1 FROM pg_trigger
-            WHERE tgname = 'increment_message_count'
-        )
-        THEN '✓ PASS (3 triggers)'
-        ELSE '✗ FAIL'
-    END AS status;
+    UNION ALL
+
+    -- Test 4: Verify HNSW vector index exists
+    SELECT
+        4 AS test_order,
+        'Test 4: HNSW Vector Index' AS test_name,
+        CASE
+            WHEN EXISTS (
+                SELECT 1 FROM pg_indexes
+                WHERE schemaname = 'public'
+                AND tablename = 'product_embeddings'
+                AND indexname = 'idx_product_embeddings_vector'
+            )
+            THEN '✓ PASS'
+            ELSE '✗ FAIL'
+        END AS status
+
+    UNION ALL
+
+    -- Test 5: Verify helper functions exist
+    SELECT
+        5 AS test_order,
+        'Test 5: Helper Functions' AS test_name,
+        CASE
+            WHEN EXISTS (SELECT 1 FROM pg_proc WHERE proname = 'search_products_by_embedding')
+            AND EXISTS (SELECT 1 FROM pg_proc WHERE proname = 'get_conversation_history')
+            AND EXISTS (SELECT 1 FROM pg_proc WHERE proname = 'get_conversation_stats')
+            THEN '✓ PASS (3 functions)'
+            ELSE '✗ FAIL'
+        END AS status
+
+    UNION ALL
+
+    -- Test 6: Verify triggers exist
+    SELECT
+        6 AS test_order,
+        'Test 6: Triggers Created' AS test_name,
+        CASE
+            WHEN EXISTS (
+                SELECT 1 FROM pg_trigger
+                WHERE tgname = 'update_product_embeddings_updated_at'
+            )
+            AND EXISTS (
+                SELECT 1 FROM pg_trigger
+                WHERE tgname = 'increment_message_count'
+            )
+            THEN '✓ PASS (3 triggers)'
+            ELSE '✗ FAIL'
+        END AS status
+
+    UNION ALL
+
+    -- Test 11: Verify RLS policies are enabled
+    SELECT
+        11 AS test_order,
+        'Test 11: RLS Enabled' AS test_name,
+        CASE
+            WHEN (SELECT relrowsecurity FROM pg_class WHERE relname = 'product_embeddings')
+            AND (SELECT relrowsecurity FROM pg_class WHERE relname = 'conversations')
+            AND (SELECT relrowsecurity FROM pg_class WHERE relname = 'messages')
+            THEN '✓ PASS (all tables)'
+            ELSE '✗ FAIL'
+        END AS status
+
+    UNION ALL
+
+    -- Test 12: Count RLS policies
+    SELECT
+        12 AS test_order,
+        'Test 12: RLS Policies Count' AS test_name,
+        (SELECT COUNT(*)::text || ' policies' FROM pg_policies
+         WHERE schemaname = 'public'
+         AND tablename IN ('product_embeddings', 'conversations', 'messages')) AS status
+)
+SELECT test_name, status FROM test_results ORDER BY test_order;
 
 -- Test 7: Test vector operations
 DO $$

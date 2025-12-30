@@ -7,13 +7,13 @@
  * - Search messages
  */
 
-import { createClient } from '@supabase/supabase-js';
+import { createClient } from "@supabase/supabase-js";
 
 // =====================================================
 // Types
 // =====================================================
 
-export type MessageRole = 'user' | 'assistant' | 'system';
+export type MessageRole = "user" | "assistant" | "system";
 
 export interface Message {
   id: string;
@@ -22,13 +22,11 @@ export interface Message {
   role: MessageRole;
   content: string;
   sequence_number: number;
-  retrieved_context: Record<string, unknown>[] | null;
   metadata: Record<string, unknown>;
   created_at: string;
 }
 
 export interface CreateMessageOptions {
-  retrievedContext?: Record<string, unknown>[];
   metadata?: Record<string, unknown>;
 }
 
@@ -50,7 +48,7 @@ function getServiceRoleClient() {
   const supabaseServiceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
   if (!supabaseUrl || !supabaseServiceRoleKey) {
-    throw new Error('Missing Supabase environment variables');
+    throw new Error("Missing Supabase environment variables");
   }
 
   return createClient(supabaseUrl, supabaseServiceRoleKey, {
@@ -84,14 +82,13 @@ export async function createMessage(
   const sequenceNumber = await getNextSequenceNumber(conversationId);
 
   const { data, error } = await supabase
-    .from('messages')
+    .from("messages")
     .insert({
       conversation_id: conversationId,
       organization_id: organizationId,
       role,
       content,
       sequence_number: sequenceNumber,
-      retrieved_context: options.retrievedContext || null,
       metadata: options.metadata || {},
     })
     .select()
@@ -111,16 +108,16 @@ async function getNextSequenceNumber(conversationId: string): Promise<number> {
   const supabase = getServiceRoleClient();
 
   const { data, error } = await supabase
-    .from('messages')
-    .select('sequence_number')
-    .eq('conversation_id', conversationId)
-    .order('sequence_number', { ascending: false })
+    .from("messages")
+    .select("sequence_number")
+    .eq("conversation_id", conversationId)
+    .order("sequence_number", { ascending: false })
     .limit(1)
     .single();
 
   if (error) {
     // No messages yet, start at 1
-    if (error.code === 'PGRST116') {
+    if (error.code === "PGRST116") {
       return 1;
     }
     throw new Error(`Failed to get next sequence number: ${error.message}`);
@@ -147,14 +144,14 @@ export async function getMessages(
   const supabase = getServiceRoleClient();
 
   let query = supabase
-    .from('messages')
-    .select('*')
-    .eq('conversation_id', conversationId)
-    .order('sequence_number', { ascending: true });
+    .from("messages")
+    .select("*")
+    .eq("conversation_id", conversationId)
+    .order("sequence_number", { ascending: true });
 
   // Filter by sequence number
   if (afterSequence !== undefined) {
-    query = query.gt('sequence_number', afterSequence);
+    query = query.gt("sequence_number", afterSequence);
   }
 
   // Pagination
@@ -185,10 +182,10 @@ export async function getRecentMessages(
   const supabase = getServiceRoleClient();
 
   const { data, error } = await supabase
-    .from('messages')
-    .select('*')
-    .eq('conversation_id', conversationId)
-    .order('sequence_number', { ascending: false })
+    .from("messages")
+    .select("*")
+    .eq("conversation_id", conversationId)
+    .order("sequence_number", { ascending: false })
     .limit(count);
 
   if (error) {
@@ -206,13 +203,13 @@ export async function getMessage(messageId: string): Promise<Message | null> {
   const supabase = getServiceRoleClient();
 
   const { data, error } = await supabase
-    .from('messages')
-    .select('*')
-    .eq('id', messageId)
+    .from("messages")
+    .select("*")
+    .eq("id", messageId)
     .single();
 
   if (error) {
-    if (error.code === 'PGRST116') {
+    if (error.code === "PGRST116") {
       return null;
     }
     throw new Error(`Failed to get message: ${error.message}`);
@@ -232,9 +229,9 @@ export async function countMessages(conversationId: string): Promise<number> {
   const supabase = getServiceRoleClient();
 
   const { count, error } = await supabase
-    .from('messages')
-    .select('*', { count: 'exact', head: true })
-    .eq('conversation_id', conversationId);
+    .from("messages")
+    .select("*", { count: "exact", head: true })
+    .eq("conversation_id", conversationId);
 
   if (error) {
     throw new Error(`Failed to count messages: ${error.message}`);
@@ -246,9 +243,7 @@ export async function countMessages(conversationId: string): Promise<number> {
 /**
  * Get message count by role
  */
-export async function getMessageCountsByRole(
-  conversationId: string
-): Promise<{
+export async function getMessageCountsByRole(conversationId: string): Promise<{
   user: number;
   assistant: number;
   system: number;
@@ -256,9 +251,9 @@ export async function getMessageCountsByRole(
   const supabase = getServiceRoleClient();
 
   const { data, error } = await supabase
-    .from('messages')
-    .select('role')
-    .eq('conversation_id', conversationId);
+    .from("messages")
+    .select("role")
+    .eq("conversation_id", conversationId);
 
   if (error) {
     throw new Error(`Failed to get message counts: ${error.message}`);
@@ -267,9 +262,9 @@ export async function getMessageCountsByRole(
   const messages = data || [];
 
   return {
-    user: messages.filter((m) => m.role === 'user').length,
-    assistant: messages.filter((m) => m.role === 'assistant').length,
-    system: messages.filter((m) => m.role === 'system').length,
+    user: messages.filter((m) => m.role === "user").length,
+    assistant: messages.filter((m) => m.role === "assistant").length,
+    system: messages.filter((m) => m.role === "system").length,
   };
 }
 
@@ -288,11 +283,11 @@ export async function searchMessages(
   const supabase = getServiceRoleClient();
 
   const { data, error } = await supabase
-    .from('messages')
-    .select('*')
-    .eq('organization_id', organizationId)
-    .textSearch('content', query)
-    .order('created_at', { ascending: false })
+    .from("messages")
+    .select("*")
+    .eq("organization_id", organizationId)
+    .textSearch("content", query)
+    .order("created_at", { ascending: false })
     .limit(limit);
 
   if (error) {
@@ -312,14 +307,16 @@ export async function searchMessagesInConversation(
   const supabase = getServiceRoleClient();
 
   const { data, error } = await supabase
-    .from('messages')
-    .select('*')
-    .eq('conversation_id', conversationId)
-    .textSearch('content', query)
-    .order('sequence_number', { ascending: true });
+    .from("messages")
+    .select("*")
+    .eq("conversation_id", conversationId)
+    .textSearch("content", query)
+    .order("sequence_number", { ascending: true });
 
   if (error) {
-    throw new Error(`Failed to search messages in conversation: ${error.message}`);
+    throw new Error(
+      `Failed to search messages in conversation: ${error.message}`
+    );
   }
 
   return data as Message[];
@@ -338,10 +335,10 @@ export async function deleteConversationMessages(
   const supabase = getServiceRoleClient();
 
   const { data, error } = await supabase
-    .from('messages')
+    .from("messages")
     .delete()
-    .eq('conversation_id', conversationId)
-    .select('id');
+    .eq("conversation_id", conversationId)
+    .select("id");
 
   if (error) {
     throw new Error(`Failed to delete messages: ${error.message}`);
@@ -364,14 +361,14 @@ export async function buildConversationContext(
   maxMessages: number = 20
 ): Promise<
   Array<{
-    role: 'user' | 'assistant' | 'system';
+    role: "user" | "assistant" | "system";
     content: string;
   }>
 > {
   const messages = await getRecentMessages(conversationId, maxMessages);
 
   return messages.map((msg) => ({
-    role: msg.role as 'user' | 'assistant' | 'system',
+    role: msg.role as "user" | "assistant" | "system",
     content: msg.content,
   }));
 }
@@ -393,10 +390,10 @@ export async function getConversationMessageStats(
   const supabase = getServiceRoleClient();
 
   const { data, error } = await supabase
-    .from('messages')
-    .select('role, content, created_at')
-    .eq('conversation_id', conversationId)
-    .order('sequence_number', { ascending: true });
+    .from("messages")
+    .select("role, content, created_at")
+    .eq("conversation_id", conversationId)
+    .order("sequence_number", { ascending: true });
 
   if (error) {
     throw new Error(`Failed to get conversation stats: ${error.message}`);
@@ -416,13 +413,16 @@ export async function getConversationMessageStats(
     };
   }
 
-  const totalLength = messages.reduce((sum, msg) => sum + msg.content.length, 0);
+  const totalLength = messages.reduce(
+    (sum, msg) => sum + msg.content.length,
+    0
+  );
 
   return {
     totalMessages: messages.length,
-    userMessages: messages.filter((m) => m.role === 'user').length,
-    assistantMessages: messages.filter((m) => m.role === 'assistant').length,
-    systemMessages: messages.filter((m) => m.role === 'system').length,
+    userMessages: messages.filter((m) => m.role === "user").length,
+    assistantMessages: messages.filter((m) => m.role === "assistant").length,
+    systemMessages: messages.filter((m) => m.role === "system").length,
     avgMessageLength: totalLength / messages.length,
     firstMessageAt: messages[0].created_at,
     lastMessageAt: messages[messages.length - 1].created_at,

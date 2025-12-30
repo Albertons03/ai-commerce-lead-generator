@@ -14,7 +14,7 @@ import {
   extractTokenUsage,
   estimateCost,
   type TokenUsage,
-} from './openai-client';
+} from "./openai-client";
 
 // =====================================================
 // Types
@@ -53,7 +53,8 @@ export interface EmbeddingOptions {
 // Configuration
 // =====================================================
 
-const DEFAULT_MODEL = process.env.OPENAI_EMBEDDING_MODEL || 'text-embedding-3-small';
+const DEFAULT_MODEL =
+  process.env.OPENAI_EMBEDDING_MODEL || "text-embedding-3-small";
 const DEFAULT_BATCH_SIZE = 10;
 
 // =====================================================
@@ -69,10 +70,7 @@ const DEFAULT_BATCH_SIZE = 10;
  * Format: "Name. Description. Category: X. Price: $Y."
  */
 export function prepareTextForEmbedding(product: ProductInput): string {
-  const parts: string[] = [
-    product.product_name,
-    product.product_description,
-  ];
+  const parts: string[] = [product.product_name, product.product_description];
 
   if (product.category) {
     parts.push(`Category: ${product.category}`);
@@ -83,7 +81,20 @@ export function prepareTextForEmbedding(product: ProductInput): string {
   }
 
   // Join with period and space, trim whitespace
-  return parts.join('. ').trim();
+  return parts.join(". ").trim();
+}
+
+/**
+ * Preprocess text for embedding generation
+ * Simple version for single text inputs
+ */
+function preprocessText(text: string): string {
+  // Basic text cleaning and normalization
+  return text
+    .trim()
+    .replace(/\s+/g, " ") // Multiple spaces to single space
+    .replace(/[^\w\s\-$.,]/g, "") // Keep only word chars, spaces, hyphens, dollar, comma, period
+    .toLowerCase();
 }
 
 /**
@@ -97,6 +108,63 @@ export function estimateTokenCount(text: string): number {
 // =====================================================
 // Embedding Generation
 // =====================================================
+
+/**
+ * Generate embedding for a single text
+ *
+ * @param text - Text to generate embedding for
+ * @param organizationId - Organization ID for tracking
+ * @returns Promise<number[]> - Embedding vector
+ */
+export async function generateEmbedding(
+  text: string,
+  organizationId?: string,
+  model: string = DEFAULT_MODEL
+): Promise<number[]> {
+  const startTime = Date.now();
+
+  // Preprocess text
+  const processedText = preprocessText(text);
+
+  try {
+    const openai = getOpenAIClient();
+
+    const response = await withRetry(async () => {
+      return await openai.embeddings.create({
+        model,
+        input: processedText,
+        encoding_format: "float",
+      });
+    });
+
+    const embedding = response.data[0]?.embedding;
+    if (!embedding) {
+      throw new Error("No embedding returned from OpenAI");
+    }
+
+    const processingTime = Date.now() - startTime;
+    const tokenUsage = extractTokenUsage(response.usage);
+    const cost = estimateCost(tokenUsage, model, "embedding");
+
+    console.log("[Embedding Service] Single embedding generated:", {
+      text_length: text.length,
+      embedding_length: embedding.length,
+      tokens: tokenUsage.totalTokens,
+      cost: `$${cost.toFixed(6)}`,
+      processing_time_ms: processingTime,
+      organization_id: organizationId,
+    });
+
+    return embedding;
+  } catch (error) {
+    console.error("[Embedding Service] Single embedding failed:", error);
+    throw new Error(
+      `Failed to generate embedding: ${
+        error instanceof Error ? error.message : "Unknown error"
+      }`
+    );
+  }
+}
 
 /**
  * Generate embeddings for a batch of products
@@ -146,7 +214,7 @@ export async function generateEmbeddings(
   const duration = Date.now() - startTime;
   const estimatedCostValue = estimateCost(
     { promptTokens: totalTokens, totalTokens },
-    model as 'text-embedding-3-small'
+    model as "text-embedding-3-small"
   );
 
   return {
@@ -174,7 +242,7 @@ async function generateEmbeddingsBatch(
     return await client.embeddings.create({
       model,
       input: texts,
-      encoding_format: 'float',
+      encoding_format: "float",
     });
   });
 
@@ -218,7 +286,7 @@ export async function generateSingleEmbedding(
     return await client.embeddings.create({
       model,
       input: text,
-      encoding_format: 'float',
+      encoding_format: "float",
     });
   });
 
@@ -241,18 +309,18 @@ export async function generateSingleEmbedding(
  * Validate that product has required fields for embedding
  */
 export function validateProduct(product: unknown): product is ProductInput {
-  if (!product || typeof product !== 'object') {
+  if (!product || typeof product !== "object") {
     return false;
   }
 
   const p = product as Partial<ProductInput>;
 
   return (
-    typeof p.product_id === 'string' &&
+    typeof p.product_id === "string" &&
     p.product_id.length > 0 &&
-    typeof p.product_name === 'string' &&
+    typeof p.product_name === "string" &&
     p.product_name.length > 0 &&
-    typeof p.product_description === 'string' &&
+    typeof p.product_description === "string" &&
     p.product_description.length > 0
   );
 }
@@ -261,9 +329,7 @@ export function validateProduct(product: unknown): product is ProductInput {
  * Validate and filter products
  * Returns valid products and list of errors
  */
-export function validateProducts(
-  products: unknown[]
-): {
+export function validateProducts(products: unknown[]): {
   valid: ProductInput[];
   invalid: Array<{ index: number; error: string }>;
 } {
@@ -271,25 +337,25 @@ export function validateProducts(
   const invalid: Array<{ index: number; error: string }> = [];
 
   products.forEach((product, index) => {
-    if (!product || typeof product !== 'object') {
-      invalid.push({ index, error: 'Product must be an object' });
+    if (!product || typeof product !== "object") {
+      invalid.push({ index, error: "Product must be an object" });
       return;
     }
 
     const p = product as Partial<ProductInput>;
 
-    if (!p.product_id || typeof p.product_id !== 'string') {
-      invalid.push({ index, error: 'Missing or invalid product_id' });
+    if (!p.product_id || typeof p.product_id !== "string") {
+      invalid.push({ index, error: "Missing or invalid product_id" });
       return;
     }
 
-    if (!p.product_name || typeof p.product_name !== 'string') {
-      invalid.push({ index, error: 'Missing or invalid product_name' });
+    if (!p.product_name || typeof p.product_name !== "string") {
+      invalid.push({ index, error: "Missing or invalid product_name" });
       return;
     }
 
-    if (!p.product_description || typeof p.product_description !== 'string') {
-      invalid.push({ index, error: 'Missing or invalid product_description' });
+    if (!p.product_description || typeof p.product_description !== "string") {
+      invalid.push({ index, error: "Missing or invalid product_description" });
       return;
     }
 
@@ -329,7 +395,7 @@ export function estimateEmbeddingCost(products: ProductInput[]): {
 
   const estimatedCostValue = estimateCost(
     { promptTokens: estimatedTokens, totalTokens: estimatedTokens },
-    'text-embedding-3-small'
+    "text-embedding-3-small"
   );
 
   return {

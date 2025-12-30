@@ -8,15 +8,20 @@
  * - Abandon stale conversations
  */
 
-import { createClient } from '@supabase/supabase-js';
+import { createClient } from "@supabase/supabase-js";
 
 // =====================================================
 // Types
 // =====================================================
 
-export type ConversationStatus = 'active' | 'completed' | 'abandoned';
-export type ConversationIntent = 'browse' | 'compare' | 'purchase' | 'support' | 'other';
-export type ConversationSentiment = 'positive' | 'neutral' | 'negative';
+export type ConversationStatus = "active" | "completed" | "abandoned";
+export type ConversationIntent =
+  | "browse"
+  | "compare"
+  | "purchase"
+  | "support"
+  | "other";
+export type ConversationSentiment = "positive" | "neutral" | "negative";
 
 export interface Conversation {
   id: string;
@@ -68,7 +73,7 @@ function getServiceRoleClient() {
   const supabaseServiceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
   if (!supabaseUrl || !supabaseServiceRoleKey) {
-    throw new Error('Missing Supabase environment variables');
+    throw new Error("Missing Supabase environment variables");
   }
 
   return createClient(supabaseUrl, supabaseServiceRoleKey, {
@@ -94,11 +99,11 @@ export async function createConversation(
   const supabase = getServiceRoleClient();
 
   const { data, error } = await supabase
-    .from('conversations')
+    .from("conversations")
     .insert({
       organization_id: organizationId,
       session_id: sessionId,
-      status: 'active',
+      status: "active",
       visitor_metadata: visitorMetadata,
     })
     .select()
@@ -109,6 +114,43 @@ export async function createConversation(
   }
 
   return data as Conversation;
+}
+
+/**
+ * Initialize conversation - creates new or returns existing based on session
+ */
+export async function initializeConversation(
+  organizationId: string,
+  sessionId: string,
+  visitorMetadata: Record<string, unknown> = {}
+): Promise<{ conversation: Conversation; isNew: boolean }> {
+  // First, try to find existing conversation by session
+  const existing = await getConversationBySession(sessionId, organizationId);
+
+  if (existing) {
+    // Update visitor metadata if provided
+    if (Object.keys(visitorMetadata).length > 0) {
+      await updateConversationMetadata(existing.id, {
+        ...existing.visitor_metadata,
+        ...visitorMetadata,
+        last_seen: new Date().toISOString(),
+      });
+
+      // Return updated conversation
+      const updated = await getConversation(existing.id);
+      return { conversation: updated!, isNew: false };
+    }
+
+    return { conversation: existing, isNew: false };
+  }
+
+  // Create new conversation
+  const newConversation = await createConversation(organizationId, sessionId, {
+    ...visitorMetadata,
+    first_seen: new Date().toISOString(),
+  });
+
+  return { conversation: newConversation, isNew: true };
 }
 
 // =====================================================
@@ -125,14 +167,14 @@ export async function getConversationBySession(
   const supabase = getServiceRoleClient();
 
   const { data, error } = await supabase
-    .from('conversations')
-    .select('*')
-    .eq('organization_id', organizationId)
-    .eq('session_id', sessionId)
+    .from("conversations")
+    .select("*")
+    .eq("organization_id", organizationId)
+    .eq("session_id", sessionId)
     .single();
 
   if (error) {
-    if (error.code === 'PGRST116') {
+    if (error.code === "PGRST116") {
       // No rows returned
       return null;
     }
@@ -151,13 +193,13 @@ export async function getConversation(
   const supabase = getServiceRoleClient();
 
   const { data, error } = await supabase
-    .from('conversations')
-    .select('*')
-    .eq('id', conversationId)
+    .from("conversations")
+    .select("*")
+    .eq("id", conversationId)
     .single();
 
   if (error) {
-    if (error.code === 'PGRST116') {
+    if (error.code === "PGRST116") {
       return null;
     }
     throw new Error(`Failed to get conversation: ${error.message}`);
@@ -173,18 +215,13 @@ export async function listConversations(
   organizationId: string,
   options: ListConversationsOptions = {}
 ): Promise<ListConversationsResult> {
-  const {
-    status,
-    limit = 20,
-    offset = 0,
-    includeLeads = false,
-  } = options;
+  const { status, limit = 20, offset = 0, includeLeads = false } = options;
 
   const supabase = getServiceRoleClient();
 
   // Build query
   let query = supabase
-    .from('conversations')
+    .from("conversations")
     .select(
       includeLeads
         ? `
@@ -196,16 +233,16 @@ export async function listConversations(
             status
           )
         `
-        : '*',
-      { count: 'exact' }
+        : "*",
+      { count: "exact" }
     )
-    .eq('organization_id', organizationId)
-    .order('last_message_at', { ascending: false, nullsFirst: false })
-    .order('created_at', { ascending: false });
+    .eq("organization_id", organizationId)
+    .order("last_message_at", { ascending: false, nullsFirst: false })
+    .order("created_at", { ascending: false });
 
   // Filter by status
   if (status) {
-    query = query.eq('status', status);
+    query = query.eq("status", status);
   }
 
   // Pagination
@@ -239,9 +276,9 @@ export async function updateConversationStatus(
   const supabase = getServiceRoleClient();
 
   const { error } = await supabase
-    .from('conversations')
+    .from("conversations")
     .update({ status })
-    .eq('id', conversationId);
+    .eq("id", conversationId);
 
   if (error) {
     throw new Error(`Failed to update conversation status: ${error.message}`);
@@ -262,9 +299,9 @@ export async function updateConversationMetadata(
   const supabase = getServiceRoleClient();
 
   const { error } = await supabase
-    .from('conversations')
+    .from("conversations")
     .update(updates)
-    .eq('id', conversationId);
+    .eq("id", conversationId);
 
   if (error) {
     throw new Error(`Failed to update conversation metadata: ${error.message}`);
@@ -298,12 +335,12 @@ export async function abandonStaleConversations(
   cutoffTime.setMinutes(cutoffTime.getMinutes() - inactiveMinutes);
 
   const { data, error } = await supabase
-    .from('conversations')
-    .update({ status: 'abandoned' })
-    .eq('organization_id', organizationId)
-    .eq('status', 'active')
-    .lt('last_message_at', cutoffTime.toISOString())
-    .select('id');
+    .from("conversations")
+    .update({ status: "abandoned" })
+    .eq("organization_id", organizationId)
+    .eq("status", "active")
+    .lt("last_message_at", cutoffTime.toISOString())
+    .select("id");
 
   if (error) {
     throw new Error(`Failed to abandon stale conversations: ${error.message}`);
@@ -334,16 +371,16 @@ export async function getConversationStats(
   const supabase = getServiceRoleClient();
 
   let query = supabase
-    .from('conversations')
-    .select('status, message_count, lead_id')
-    .eq('organization_id', organizationId);
+    .from("conversations")
+    .select("status, message_count, lead_id")
+    .eq("organization_id", organizationId);
 
   if (dateFrom) {
-    query = query.gte('created_at', dateFrom.toISOString());
+    query = query.gte("created_at", dateFrom.toISOString());
   }
 
   if (dateTo) {
-    query = query.lte('created_at', dateTo.toISOString());
+    query = query.lte("created_at", dateTo.toISOString());
   }
 
   const { data, error } = await query;
@@ -356,15 +393,16 @@ export async function getConversationStats(
 
   const stats = {
     total: conversations.length,
-    active: conversations.filter((c) => c.status === 'active').length,
-    completed: conversations.filter((c) => c.status === 'completed').length,
-    abandoned: conversations.filter((c) => c.status === 'abandoned').length,
+    active: conversations.filter((c) => c.status === "active").length,
+    completed: conversations.filter((c) => c.status === "completed").length,
+    abandoned: conversations.filter((c) => c.status === "abandoned").length,
     avgMessagesPerConversation:
       conversations.length > 0
         ? conversations.reduce((sum, c) => sum + c.message_count, 0) /
           conversations.length
         : 0,
-    conversationsWithLeads: conversations.filter((c) => c.lead_id !== null).length,
+    conversationsWithLeads: conversations.filter((c) => c.lead_id !== null)
+      .length,
   };
 
   return stats;
@@ -384,10 +422,10 @@ export async function verifyConversationAccess(
   const supabase = getServiceRoleClient();
 
   const { data, error } = await supabase
-    .from('conversations')
-    .select('id')
-    .eq('id', conversationId)
-    .eq('organization_id', organizationId)
+    .from("conversations")
+    .select("id")
+    .eq("id", conversationId)
+    .eq("organization_id", organizationId)
     .single();
 
   if (error || !data) {

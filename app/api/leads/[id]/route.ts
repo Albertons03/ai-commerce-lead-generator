@@ -3,6 +3,7 @@ import { NextResponse } from 'next/server'
 import type { NextRequest } from 'next/server'
 import { updateLeadSchema } from '@/lib/validations/leads'
 import { userHasRole } from '@/lib/supabase/helpers'
+import type { LeadUpdate } from '@/lib/supabase/types'
 
 /**
  * GET /api/leads/[id]
@@ -47,11 +48,11 @@ export async function GET(
     }
 
     // Fetch lead
-    const { data: lead, error: leadError } = await supabase
+    const { data: lead, error: leadError } = (await supabase
       .from('leads')
       .select('*')
       .eq('id', id)
-      .single()
+      .single()) as { data: any | null; error: any }
 
     if (leadError || !lead) {
       return NextResponse.json(
@@ -81,7 +82,7 @@ export async function GET(
     }
 
     // Fetch activity timeline
-    const { data: activityLogs, error: activityError } = await supabase
+    const { data: activityLogs, error: activityError } = (await supabase
       .from('lead_activity_log')
       .select(`
         id,
@@ -91,7 +92,16 @@ export async function GET(
         created_at
       `)
       .eq('lead_id', id)
-      .order('created_at', { ascending: false })
+      .order('created_at', { ascending: false })) as {
+        data: Array<{
+          id: string;
+          activity_type: string;
+          description: string | null;
+          performed_by: string | null;
+          created_at: string;
+        }> | null;
+        error: any;
+      }
 
     if (activityError) {
       console.error('Error fetching activity logs:', activityError)
@@ -102,11 +112,11 @@ export async function GET(
       ? await Promise.all(
           activityLogs.map(async (activity) => {
             if (activity.performed_by) {
-              const { data: userData } = await supabase
+              const { data: userData } = (await supabase
                 .from('users')
                 .select('full_name')
                 .eq('id', activity.performed_by)
-                .single()
+                .single()) as { data: { full_name: string | null } | null; error: any }
 
               return {
                 id: activity.id,
@@ -253,11 +263,11 @@ export async function PATCH(
     }
 
     // Fetch current lead to check organization and current values
-    const { data: currentLead, error: leadError } = await supabase
+    const { data: currentLead, error: leadError } = (await supabase
       .from('leads')
       .select('*')
       .eq('id', id)
-      .single()
+      .single()) as { data: any | null; error: any }
 
     if (leadError || !currentLead) {
       return NextResponse.json(
@@ -287,12 +297,14 @@ export async function PATCH(
     }
 
     // Update lead
-    const { data: updatedLead, error: updateError } = await supabase
+    const updateResult = (await (supabase as any)
       .from('leads')
       .update(updates)
       .eq('id', id)
       .select()
-      .single()
+      .single()) as { data: any | null; error: any }
+
+    const { data: updatedLead, error: updateError } = updateResult
 
     if (updateError) {
       console.error('Error updating lead:', updateError)
@@ -310,7 +322,7 @@ export async function PATCH(
     if (updates.status && updates.status !== currentLead.status) {
       const activityDescription = `Status changed from ${currentLead.status} to ${updates.status}`
 
-      const { error: activityError } = await supabase
+      const activityResult = await supabase
         .from('lead_activity_log')
         .insert({
           lead_id: id,
@@ -321,7 +333,9 @@ export async function PATCH(
           description: activityDescription,
           performed_by: user.id,
           metadata: {},
-        })
+        } as any)
+
+      const { error: activityError } = activityResult as { error: any }
 
       if (activityError) {
         console.error('Error logging activity:', activityError)
@@ -331,7 +345,7 @@ export async function PATCH(
 
     // Log activity for note additions
     if (updates.notes && updates.notes !== currentLead.notes) {
-      const { error: activityError } = await supabase
+      const noteActivityResult = await supabase
         .from('lead_activity_log')
         .insert({
           lead_id: id,
@@ -340,7 +354,9 @@ export async function PATCH(
           description: 'Note added',
           performed_by: user.id,
           metadata: {},
-        })
+        } as any)
+
+      const { error: activityError } = noteActivityResult as { error: any }
 
       if (activityError) {
         console.error('Error logging note activity:', activityError)

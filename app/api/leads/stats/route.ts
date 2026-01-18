@@ -3,6 +3,15 @@ import { NextResponse } from 'next/server'
 import type { NextRequest } from 'next/server'
 import { getLeadStatsQuerySchema } from '@/lib/validations/leads'
 import { userHasRole } from '@/lib/supabase/helpers'
+import type { Lead } from '@/lib/supabase/types'
+
+interface LeadStatsResult {
+  total_leads: number
+  new_leads: number
+  qualified_leads: number
+  converted_leads: number
+  avg_lead_score: number
+}
 
 /**
  * GET /api/leads/stats
@@ -80,14 +89,14 @@ export async function GET(request: NextRequest) {
     const formatDate = (date: Date) => date.toISOString()
 
     // Fetch current period statistics
-    const { data: currentStats, error: currentError } = await supabase.rpc(
+    const { data: currentStats, error: currentError } = (await (supabase.rpc as any)(
       'get_lead_stats',
       {
         p_organization_id: organization_id,
         p_start_date: formatDate(currentPeriodStart),
         p_end_date: formatDate(now),
       }
-    )
+    )) as { data: LeadStatsResult | null; error: any }
 
     if (currentError) {
       console.error('Error fetching current stats:', currentError)
@@ -104,14 +113,14 @@ export async function GET(request: NextRequest) {
     }
 
     // Fetch previous period statistics for comparison
-    const { data: previousStats, error: previousError } = await supabase.rpc(
+    const { data: previousStats, error: previousError } = (await (supabase.rpc as any)(
       'get_lead_stats',
       {
         p_organization_id: organization_id,
         p_start_date: formatDate(previousPeriodStart),
         p_end_date: formatDate(currentPeriodStart),
       }
-    )
+    )) as { data: LeadStatsResult | null; error: any }
 
     if (previousError) {
       console.error('Error fetching previous stats:', previousError)
@@ -200,50 +209,52 @@ async function fetchStatsManually(
 ) {
   try {
     // Fetch current period leads
-    const { data: currentLeads, error: currentError } = await supabase
+    const { data: currentLeads, error: currentError } = (await supabase
       .from('leads')
       .select('status, lead_score')
       .eq('organization_id', organizationId)
       .gte('created_at', currentStart.toISOString())
-      .lte('created_at', currentEnd.toISOString())
+      .lte('created_at', currentEnd.toISOString())) as { data: Pick<Lead, 'status' | 'lead_score'>[] | null; error: any }
 
     if (currentError) {
       throw currentError
     }
 
     // Fetch previous period leads
-    const { data: previousLeads, error: previousError } = await supabase
+    const { data: previousLeads, error: previousError } = (await supabase
       .from('leads')
       .select('status, lead_score')
       .eq('organization_id', organizationId)
       .gte('created_at', previousStart.toISOString())
-      .lte('created_at', previousEnd.toISOString())
+      .lte('created_at', previousEnd.toISOString())) as { data: Pick<Lead, 'status' | 'lead_score'>[] | null; error: any }
 
     if (previousError) {
       throw previousError
     }
 
     // Calculate current period stats
+    const currentLeadsArray = currentLeads || []
     const currentStats = {
-      total_leads: currentLeads.length,
-      new_leads: currentLeads.filter((l) => l.status === 'new').length,
-      qualified_leads: currentLeads.filter((l) => l.status === 'qualified').length,
-      converted_leads: currentLeads.filter((l) => l.status === 'converted').length,
+      total_leads: currentLeadsArray.length,
+      new_leads: currentLeadsArray.filter((l) => l.status === 'new').length,
+      qualified_leads: currentLeadsArray.filter((l) => l.status === 'qualified').length,
+      converted_leads: currentLeadsArray.filter((l) => l.status === 'converted').length,
       avg_lead_score:
-        currentLeads.length > 0
-          ? currentLeads.reduce((sum, l) => sum + l.lead_score, 0) / currentLeads.length
+        currentLeadsArray.length > 0
+          ? currentLeadsArray.reduce((sum, l) => sum + l.lead_score, 0) / currentLeadsArray.length
           : 0,
     }
 
     // Calculate previous period stats
+    const previousLeadsArray = previousLeads || []
     const previousStats = {
-      total_leads: previousLeads.length,
-      new_leads: previousLeads.filter((l) => l.status === 'new').length,
-      qualified_leads: previousLeads.filter((l) => l.status === 'qualified').length,
-      converted_leads: previousLeads.filter((l) => l.status === 'converted').length,
+      total_leads: previousLeadsArray.length,
+      new_leads: previousLeadsArray.filter((l) => l.status === 'new').length,
+      qualified_leads: previousLeadsArray.filter((l) => l.status === 'qualified').length,
+      converted_leads: previousLeadsArray.filter((l) => l.status === 'converted').length,
       avg_lead_score:
-        previousLeads.length > 0
-          ? previousLeads.reduce((sum, l) => sum + l.lead_score, 0) / previousLeads.length
+        previousLeadsArray.length > 0
+          ? previousLeadsArray.reduce((sum, l) => sum + l.lead_score, 0) / previousLeadsArray.length
           : 0,
     }
 

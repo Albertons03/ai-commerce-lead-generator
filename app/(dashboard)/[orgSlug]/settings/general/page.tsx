@@ -43,7 +43,7 @@ export default function GeneralSettingsPage() {
           setFormData({
             name: data.name,
             slug: data.slug,
-            description: (data.settings as any)?.description || '',
+            description: data.description || '',
           })
         }
       } catch (error) {
@@ -68,11 +68,7 @@ export default function GeneralSettingsPage() {
 
       const { error } = await updateOrganization(supabase, organization.id, {
         name: formData.name,
-        slug: formData.slug,
-        settings: {
-          ...(organization.settings as object),
-          description: formData.description,
-        },
+        description: formData.description,
       })
 
       if (error) {

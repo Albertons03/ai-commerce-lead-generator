@@ -11,7 +11,7 @@
 
 import { createServerSupabaseClient, getCurrentUser } from '@/lib/supabase/client';
 import { NextRequest, NextResponse } from 'next/server';
-import type { LeadStatus, LeadSource } from '@/lib/supabase/types';
+import type { LeadStatus, LeadSource, Lead, OrganizationMember } from '@/lib/supabase/types';
 
 // =====================================================
 // Types
@@ -114,8 +114,8 @@ async function logExportAction(
   filters: ExportFilters
 ): Promise<void> {
   try {
-    await supabase.from('lead_activity_log').insert({
-      lead_id: null, // This is an organization-level action
+    const logEntry = {
+      lead_id: null as any, // This is an organization-level action
       organization_id: organizationId,
       activity_type: 'export',
       old_value: null,
@@ -127,7 +127,8 @@ async function logExportAction(
         filters: filters,
         timestamp: new Date().toISOString(),
       },
-    });
+    }
+    await (supabase.from('lead_activity_log').insert as any)(logEntry);
   } catch (error) {
     // Log error but don't fail the export
     console.error('Failed to log export action:', error);
@@ -166,10 +167,10 @@ export async function POST(request: NextRequest) {
     }
 
     // 3. Get User's Organizations
-    const { data: userOrgs, error: orgError } = await supabase
+    const { data: userOrgs, error: orgError } = (await supabase
       .from('organization_members')
       .select('organization_id')
-      .eq('user_id', user.id);
+      .eq('user_id', user.id)) as { data: Pick<OrganizationMember, 'organization_id'>[] | null; error: any };
 
     if (orgError) {
       console.error('Error fetching user organizations:', orgError);
@@ -238,7 +239,7 @@ export async function POST(request: NextRequest) {
     query = query.limit(EXPORT_LIMIT + 1);
 
     // 5. Execute Query
-    const { data: leads, error: leadsError, count } = await query;
+    const { data: leads, error: leadsError, count } = (await query) as { data: Lead[] | null; error: any; count: number | null };
 
     if (leadsError) {
       console.error('Error fetching leads for export:', leadsError);

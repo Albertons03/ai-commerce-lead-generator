@@ -236,7 +236,7 @@ export function extractTokenUsage(
 
   return {
     promptTokens: usage.prompt_tokens,
-    completionTokens: usage.completion_tokens,
+    completionTokens: 'completion_tokens' in usage ? usage.completion_tokens : 0,
     totalTokens: usage.total_tokens,
   };
 }

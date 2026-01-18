@@ -6,15 +6,12 @@ import { toast } from 'sonner'
 import { createBrowserSupabaseClient } from '@/lib/supabase/client'
 import {
   getOrganizationBySlug,
-  getOrganizationMembers,
-  removeOrganizationMember,
-  updateMemberRole,
 } from '@/lib/supabase/helpers'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
-import { UserPlus, MoreVertical, Trash2, Shield } from 'lucide-react'
-import type { OrganizationRole } from '@/lib/supabase/types'
+import { UserPlus, Trash2, Shield, Users } from 'lucide-react'
+import type { OrganizationRole, OrganizationMemberUpdate } from '@/lib/supabase/types'
 
 interface MemberWithProfile {
   id: string
@@ -55,7 +52,7 @@ export default function MembersSettingsPage() {
         if (!org) return
 
         // Get members with profiles
-        const { data: memberData, error: membersError } = await supabase
+        const { data: memberData, error: membersError } = (await supabase
           .from('organization_members')
           .select(`
             id,
@@ -70,7 +67,7 @@ export default function MembersSettingsPage() {
             )
           `)
           .eq('organization_id', org.id)
-          .order('joined_at', { ascending: true })
+          .order('joined_at', { ascending: true })) as { data: MemberWithProfile[] | null; error: any }
 
         if (membersError) {
           toast.error('Failed to load members')
@@ -79,12 +76,12 @@ export default function MembersSettingsPage() {
         }
 
         // Find current user's role
-        const currentMember = memberData?.find((m: any) => m.user_id === user.id)
+        const currentMember = memberData?.find((m) => m.user_id === user.id)
         if (currentMember) {
           setCurrentUserRole(currentMember.role)
         }
 
-        setMembers(memberData as any || [])
+        setMembers(memberData || [])
       } catch (error) {
         console.error('Error loading members:', error)
         toast.error('Failed to load members')
@@ -125,10 +122,11 @@ export default function MembersSettingsPage() {
   const handleChangeRole = async (memberId: string, newRole: OrganizationRole) => {
     try {
       const supabase = createBrowserSupabaseClient()
-      const { error } = await supabase
+      const updateData: OrganizationMemberUpdate = { role: newRole }
+      const { error } = (await (supabase
         .from('organization_members')
-        .update({ role: newRole })
-        .eq('id', memberId)
+        .update as any)(updateData)
+        .eq('id', memberId)) as { error: any }
 
       if (error) {
         toast.error('Failed to change role')

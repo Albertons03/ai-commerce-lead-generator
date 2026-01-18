@@ -3,6 +3,7 @@ import { NextResponse } from 'next/server'
 import type { NextRequest } from 'next/server'
 import { getLeadsQuerySchema, formatPagination, sanitizeSearchQuery } from '@/lib/validations/leads'
 import { userHasRole } from '@/lib/supabase/helpers'
+import type { Lead } from '@/lib/supabase/types'
 
 /**
  * GET /api/leads
@@ -141,7 +142,7 @@ export async function GET(request: NextRequest) {
     query = query.range(from, to)
 
     // Execute query
-    const { data: leads, error, count } = await query
+    const { data: leads, error, count } = (await query) as { data: Lead[] | null; error: any; count: number | null }
 
     if (error) {
       console.error('Error fetching leads:', error)
@@ -161,7 +162,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.json(
       {
         success: true,
-        data: leads.map((lead) => ({
+        data: (leads || []).map((lead) => ({
           id: lead.id,
           name: lead.name,
           email: lead.email,

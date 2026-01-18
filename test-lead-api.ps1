@@ -20,7 +20,7 @@ Write-Host "🚀 Testing Public Lead Capture API..." -ForegroundColor Cyan
 Write-Host ""
 
 try {
-    $response = Invoke-RestMethod -Uri "http://localhost:3002/api/public/leads" -Method Post -Headers $headers -Body $body
+    $response = Invoke-RestMethod -Uri "http://localhost:3000/api/public/leads" -Method Post -Headers $headers -Body $body
 
     Write-Host "✅ SUCCESS!" -ForegroundColor Green
     Write-Host ""
@@ -30,7 +30,7 @@ try {
     Write-Host "🎯 Lead ID: $($response.data.id)" -ForegroundColor Cyan
     Write-Host ""
     Write-Host "📋 Next steps:" -ForegroundColor Yellow
-    Write-Host "1. Go to: http://localhost:3002/[orgSlug]/leads"
+    Write-Host "1. Go to: http://localhost:3000/[orgSlug]/leads"
     Write-Host "2. You should see the new lead in the list!"
 
 } catch {

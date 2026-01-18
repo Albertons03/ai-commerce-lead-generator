@@ -143,8 +143,8 @@ export async function generateEmbedding(
     }
 
     const processingTime = Date.now() - startTime;
-    const tokenUsage = extractTokenUsage(response.usage);
-    const cost = estimateCost(tokenUsage, model, "embedding");
+    const tokenUsage = extractTokenUsage(response.usage as any);
+    const cost = estimateCost(tokenUsage, model as any);
 
     console.log("[Embedding Service] Single embedding generated:", {
       text_length: text.length,
@@ -214,7 +214,7 @@ export async function generateEmbeddings(
   const duration = Date.now() - startTime;
   const estimatedCostValue = estimateCost(
     { promptTokens: totalTokens, totalTokens },
-    model as "text-embedding-3-small"
+    model as any
   );
 
   return {

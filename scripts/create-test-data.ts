@@ -26,14 +26,14 @@ async function createTestData() {
       .select("id")
       .eq("email", testEmail);
 
-    if (existingUsers?.length > 0) {
+    if (existingUsers?.length) {
       userId = existingUsers[0].id;
       console.log("✅ Using existing test user:", userId);
     } else {
       // Create test user
-      const { data: newUser, error: userError } = await supabase
+      const { data: newUser, error: userError } = await (supabase
         .from("users")
-        .insert([
+        .insert as any)([
           {
             email: testEmail,
             name: "Test User",
@@ -62,14 +62,14 @@ async function createTestData() {
       .select("id")
       .eq("slug", orgSlug);
 
-    if (existingOrgs?.length > 0) {
+    if (existingOrgs?.length) {
       orgId = existingOrgs[0].id;
       console.log("✅ Using existing organization:", orgId);
     } else {
       // Create organization
-      const { data: newOrg, error: orgError } = await supabase
+      const { data: newOrg, error: orgError } = await (supabase
         .from("organizations")
-        .insert([
+        .insert as any)([
           {
             name: "Alibaba Test Store",
             slug: orgSlug,
@@ -101,9 +101,9 @@ async function createTestData() {
       .eq("user_id", userId);
 
     if (!existingMembership?.length) {
-      const { error: memberError } = await supabase
+      const { error: memberError } = await (supabase
         .from("organization_members")
-        .insert([
+        .insert as any)([
           {
             organization_id: orgId,
             user_id: userId,
@@ -120,9 +120,9 @@ async function createTestData() {
     }
 
     // 4. Create sample conversation
-    const { data: conversation, error: convError } = await supabase
+    const { data: conversation, error: convError } = await (supabase
       .from("conversations")
-      .insert([
+      .insert as any)([
         {
           organization_id: orgId,
           status: "active",
@@ -149,9 +149,9 @@ async function createTestData() {
 
     // 5. Create sample products (if products table exists)
     try {
-      const { data: products, error: productError } = await supabase
+      const { data: products, error: productError } = await (supabase
         .from("products")
-        .insert([
+        .insert as any)([
           {
             organization_id: orgId,
             name: "Dell Latitude 5520 Laptop",
@@ -201,7 +201,7 @@ async function createTestData() {
         ])
         .select();
 
-      if (!productError && products) {
+      if (!productError && products?.length) {
         console.log(`✅ Created ${products.length} sample products`);
       }
     } catch (error) {

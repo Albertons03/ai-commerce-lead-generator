@@ -65,7 +65,7 @@ export async function GET(
             role: msg.role,
             content: msg.content,
             sequence_number: msg.sequence_number,
-            retrieved_context: msg.retrieved_context,
+            retrieved_context: (msg as any).retrieved_context,
             metadata: msg.metadata,
             created_at: msg.created_at,
           })),

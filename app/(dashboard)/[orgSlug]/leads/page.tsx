@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
-import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card'
+import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { LeadsTable } from '@/components/leads/leads-table'
 import { LeadFilters, FilterState } from '@/components/leads/lead-filters'
@@ -55,11 +55,11 @@ export default function LeadListPage({ params }: LeadListPageProps) {
     async function fetchOrganization() {
       try {
         const supabase = createBrowserSupabaseClient()
-        const { data, error } = await supabase
+        const { data, error } = (await supabase
           .from('organizations')
           .select('id')
           .eq('slug', orgSlug)
-          .single()
+          .single()) as { data: { id: string } | null; error: any }
 
         if (error || !data) {
           console.error('Failed to fetch organization:', error)

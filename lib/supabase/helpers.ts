@@ -77,9 +77,9 @@ export async function updateUser(
   userId: string,
   updates: Partial<Pick<User, 'full_name' | 'avatar_url'>>
 ) {
-  const { data, error } = await supabase
+  const { data, error } = await (supabase
     .from('users')
-    .update(updates)
+    .update as any)(updates)
     .eq('id', userId)
     .select()
     .single();
@@ -104,13 +104,13 @@ export async function createOrganization(
   supabase: SupabaseClient | SupabaseServerClient,
   params: CreateOrganizationParams
 ) {
-  const { data, error } = await supabase.rpc('create_organization_with_owner', {
+  const { data, error } = (await (supabase.rpc as any)('create_organization_with_owner', {
     p_name: params.name,
     p_slug: params.slug,
     p_description: params.description || null,
     p_logo_url: params.logo_url || null,
     p_website_url: params.website_url || null,
-  });
+  })) as { data: string | null; error: any };
 
   if (error) {
     console.error('Error creating organization:', error);
@@ -121,7 +121,7 @@ export async function createOrganization(
   const { data: org, error: fetchError } = await supabase
     .from('organizations')
     .select('*')
-    .eq('id', data)
+    .eq('id', data || '')
     .single();
 
   if (fetchError) {
@@ -181,7 +181,7 @@ export async function getOrganizationBySlug(
 export async function getUserOrganizations(
   supabase: SupabaseClient | SupabaseServerClient
 ) {
-  const { data, error } = await supabase.rpc('get_user_organizations');
+  const { data, error } = (await (supabase.rpc as any)('get_user_organizations')) as { data: GetUserOrganizationsResult[] | null; error: any };
 
   if (error) {
     console.error('Error fetching user organizations:', error);
@@ -200,9 +200,9 @@ export async function updateOrganization(
   organizationId: string,
   updates: Partial<Pick<Organization, 'name' | 'description' | 'logo_url' | 'website_url' | 'settings'>>
 ) {
-  const { data, error } = await supabase
+  const { data, error } = await (supabase
     .from('organizations')
-    .update(updates)
+    .update as any)(updates)
     .eq('id', organizationId)
     .select()
     .single();
@@ -300,9 +300,9 @@ export async function addOrganizationMember(
   userId: string,
   role: OrganizationRole = 'member'
 ) {
-  const { data, error } = await supabase
+  const { data, error } = await (supabase
     .from('organization_members')
-    .insert({
+    .insert as any)({
       organization_id: organizationId,
       user_id: userId,
       role: role,
@@ -331,9 +331,9 @@ export async function updateMemberRole(
   userId: string,
   newRole: OrganizationRole
 ) {
-  const { data, error } = await supabase
+  const { data, error } = await (supabase
     .from('organization_members')
-    .update({ role: newRole })
+    .update as any)({ role: newRole })
     .eq('organization_id', organizationId)
     .eq('user_id', userId)
     .select(`
@@ -381,9 +381,9 @@ export async function getOrganizationMemberCount(
   supabase: SupabaseClient | SupabaseServerClient,
   organizationId: string
 ) {
-  const { data, error } = await supabase.rpc('get_organization_member_count', {
+  const { data, error } = (await (supabase.rpc as any)('get_organization_member_count', {
     p_organization_id: organizationId,
-  });
+  })) as { data: number | null; error: any };
 
   if (error) {
     console.error('Error fetching organization member count:', error);
@@ -406,10 +406,10 @@ export async function userHasRole(
   organizationId: string,
   requiredRole: OrganizationRole
 ) {
-  const { data, error } = await supabase.rpc('user_has_role_in_org', {
+  const { data, error } = (await (supabase.rpc as any)('user_has_role_in_org', {
     p_organization_id: organizationId,
     p_required_role: requiredRole,
-  });
+  })) as { data: boolean | null; error: any };
 
   if (error) {
     console.error('Error checking user role:', error);

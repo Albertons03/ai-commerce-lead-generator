@@ -353,7 +353,7 @@ async function processChatMessage(
   );
 
   // Step 7: Check for lead capture (async, non-blocking)
-  let leadCaptureResult = null;
+  let leadCaptureResult: { lead_id: string; score: number; triggers: string[] } | undefined = undefined;
   let leadCaptureTime = 0;
 
   try {

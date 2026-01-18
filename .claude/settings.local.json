@@ -15,7 +15,10 @@
       "Bash(curl:*)",
       "Bash(git checkout:*)",
       "Bash(pkill:*)",
-      "Bash(npm run dev:*)"
+      "Bash(npm run dev:*)",
+      "Bash(npx tsc:*)",
+      "Bash(npm run type-check:*)",
+      "mcp__ide__getDiagnostics"
     ],
     "deny": [],
     "ask": []

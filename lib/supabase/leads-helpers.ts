@@ -112,9 +112,9 @@ export async function createLead(leadData: {
   const { createAdminSupabaseClient } = await import("./client");
   const supabase = createAdminSupabaseClient();
 
-  const { data, error } = await supabase
+  const { data, error } = await (supabase
     .from("leads")
-    .insert({
+    .insert as any)({
       organization_id: leadData.organization_id,
       name: leadData.name,
       email: leadData.email || "",
@@ -166,9 +166,9 @@ export async function updateLead(
     >
   >
 ) {
-  const { data, error } = await supabase
+  const { data, error } = await (supabase
     .from("leads")
-    .update(updates)
+    .update as any)(updates)
     .eq("id", leadId)
     .select()
     .single();
@@ -235,10 +235,10 @@ export async function getLeadCountByStatus(
   supabase: SupabaseClient | SupabaseServerClient,
   organizationId: string
 ) {
-  const { data, error } = await supabase
+  const { data, error } = (await supabase
     .from("leads")
     .select("status")
-    .eq("organization_id", organizationId);
+    .eq("organization_id", organizationId)) as { data: Array<{ status: LeadStatus }> | null; error: any };
 
   if (error) {
     console.error("Error fetching lead counts:", error);
@@ -252,10 +252,10 @@ export async function getLeadCountByStatus(
     qualified: 0,
     converted: 0,
     lost: 0,
-    total: data.length,
+    total: data?.length || 0,
   };
 
-  data.forEach((lead) => {
+  (data || []).forEach((lead) => {
     if (lead.status in counts) {
       counts[lead.status as keyof typeof counts]++;
     }
@@ -271,17 +271,17 @@ export async function getAverageLeadScore(
   supabase: SupabaseClient | SupabaseServerClient,
   organizationId: string
 ) {
-  const { data, error } = await supabase
+  const { data, error } = (await supabase
     .from("leads")
     .select("lead_score")
-    .eq("organization_id", organizationId);
+    .eq("organization_id", organizationId)) as { data: Array<{ lead_score: number }> | null; error: any };
 
   if (error) {
     console.error("Error fetching lead scores:", error);
     return { data: null, error };
   }
 
-  if (data.length === 0) {
+  if (!data?.length) {
     return { data: 0, error: null };
   }
 
@@ -365,9 +365,9 @@ export async function logLeadActivity(
   performedBy: string | null = null,
   metadata: Record<string, any> = {}
 ) {
-  const { data, error } = await supabase
+  const { data, error } = await (supabase
     .from("lead_activity_log")
-    .insert({
+    .insert as any)({
       lead_id: leadId,
       organization_id: organizationId,
       activity_type: activityType,
@@ -447,9 +447,9 @@ export async function updateMultipleLeads(
   leadIds: string[],
   updates: Partial<Pick<Lead, "status" | "lead_score" | "metadata">>
 ) {
-  const { data, error } = await supabase
+  const { data, error } = await (supabase
     .from("leads")
-    .update(updates)
+    .update as any)(updates)
     .in("id", leadIds)
     .select();
 

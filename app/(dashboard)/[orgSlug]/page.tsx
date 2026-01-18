@@ -1,66 +1,129 @@
-import { redirect } from 'next/navigation'
-import { createServerSupabaseClient } from '@/lib/supabase/client'
-import { getOrganizationBySlug } from '@/lib/supabase/helpers'
-import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card'
-import { BarChart3, Users, MessageSquare, TrendingUp, Star, ArrowUp, ArrowDown, Minus } from 'lucide-react'
-import { LeadStats } from '@/lib/types/leads'
-import { formatPercentageChange, getChangeColor } from '@/lib/types/leads'
+import { redirect } from "next/navigation";
+import { createServerSupabaseClient } from "@/lib/supabase/client";
+import { getOrganizationBySlug } from "@/lib/supabase/helpers";
+import {
+  Card,
+  CardHeader,
+  CardTitle,
+  CardDescription,
+  CardContent,
+} from "@/components/ui/card";
+import {
+  Users,
+  MessageSquare,
+  TrendingUp,
+  Star,
+  ArrowUp,
+  ArrowDown,
+  Minus,
+} from "lucide-react";
+import type { User } from "@/lib/supabase/types";
+import { LeadStats } from "@/lib/types/leads";
+import { formatPercentageChange, getChangeColor } from "@/lib/types/leads";
+import { WelcomeModal } from "@/components/dashboard/welcome-modal";
+import { SetupProgress } from "@/components/dashboard/setup-progress";
+import { getSetupSteps } from "@/lib/dashboard/setup-steps";
 
 export default async function OrganizationDashboardPage({
   params,
 }: {
-  params: { orgSlug: string }
+  params: { orgSlug: string };
 }) {
-  const supabase = await createServerSupabaseClient()
+  const supabase = await createServerSupabaseClient();
 
   // Check authentication
-  const { data: { user } } = await supabase.auth.getUser()
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
   if (!user) {
-    redirect('/login')
+    redirect("/login");
   }
 
   // Get organization
-  const { data: org, error } = await getOrganizationBySlug(supabase, params.orgSlug)
+  const { data: org, error } = await getOrganizationBySlug(
+    supabase,
+    params.orgSlug
+  );
 
   if (error || !org) {
-    redirect('/dashboard')
+    redirect("/dashboard");
   }
 
   // Get user's profile
   const { data: profile } = await supabase
-    .from('users')
-    .select('*')
-    .eq('id', user.id)
-    .single()
+    .from("users")
+    .select("*")
+    .eq("id", user.id)
+    .single() as { data: User | null };
 
-  const userName = profile?.full_name || user.email?.split('@')[0] || 'User'
+  const userName = profile?.full_name || user.email?.split("@")[0] || "User";
+
+  // Check setup completion status
+  const { data: products } = await supabase
+    .from("product_training")
+    .select("id")
+    .eq("organization_id", org.id)
+    .limit(1);
+
+  const { data: conversations } = await supabase
+    .from("conversations")
+    .select("id")
+    .eq("organization_id", org.id)
+    .limit(1);
+
+  const { data: leads } = await supabase
+    .from("leads")
+    .select("id")
+    .eq("organization_id", org.id)
+    .limit(1);
+
+  const hasProducts = Boolean(products && products.length > 0);
+  const hasTestedChat = Boolean(conversations && conversations.length > 0);
+  const hasLeads = Boolean(leads && leads.length > 0);
+  const setupSteps = await getSetupSteps(
+    params.orgSlug,
+    hasProducts,
+    hasTestedChat,
+    hasLeads
+  );
+  const isSetupComplete = setupSteps.every((step) => step.completed);
 
   // Fetch lead statistics directly from Supabase
-  let leadStats: LeadStats | null = null
+  let leadStats: LeadStats | null = null;
   try {
-    const daysBack = 30
-    const now = new Date()
-    const currentPeriodStart = new Date(now.getTime() - daysBack * 24 * 60 * 60 * 1000)
+    const daysBack = 30;
+    const now = new Date();
+    const currentPeriodStart = new Date(
+      now.getTime() - daysBack * 24 * 60 * 60 * 1000
+    );
 
     // Fetch current period leads
-    const { data: currentLeads, error: currentError } = await supabase
-      .from('leads')
-      .select('status, lead_score')
-      .eq('organization_id', org.id)
-      .gte('created_at', currentPeriodStart.toISOString())
-      .lte('created_at', now.toISOString())
+    const { data: currentLeads, error: currentError } = (await supabase
+      .from("leads")
+      .select("status, lead_score")
+      .eq("organization_id", org.id)
+      .gte("created_at", currentPeriodStart.toISOString())
+      .lte("created_at", now.toISOString())) as {
+      data: Array<{ status: string; lead_score: number }> | null;
+      error: any;
+    };
 
     if (!currentError && currentLeads) {
       // Calculate stats
-      const totalLeads = currentLeads.length
-      const newLeads = currentLeads.filter((l) => l.status === 'new').length
-      const qualifiedLeads = currentLeads.filter((l) => l.status === 'qualified').length
-      const convertedLeads = currentLeads.filter((l) => l.status === 'converted').length
+      const totalLeads = currentLeads.length;
+      const newLeads = currentLeads.filter((l) => l.status === "new").length;
+      const qualifiedLeads = currentLeads.filter(
+        (l) => l.status === "qualified"
+      ).length;
+      const convertedLeads = currentLeads.filter(
+        (l) => l.status === "converted"
+      ).length;
       const avgLeadScore =
         totalLeads > 0
           ? currentLeads.reduce((sum, l) => sum + l.lead_score, 0) / totalLeads
-          : 0
-      const conversionRate = totalLeads > 0 ? (convertedLeads / totalLeads) * 100 : 0
+          : 0;
+      const conversionRate =
+        totalLeads > 0 ? (convertedLeads / totalLeads) * 100 : 0;
 
       leadStats = {
         total_leads: totalLeads,
@@ -71,10 +134,10 @@ export default async function OrganizationDashboardPage({
         avg_lead_score_change: 0,
         conversion_rate: parseFloat(conversionRate.toFixed(1)),
         conversion_rate_change: conversionRate > 0 ? 100 : 0,
-      }
+      };
     }
   } catch (error) {
-    console.error('Failed to fetch lead stats:', error)
+    console.error("Failed to fetch lead stats:", error);
     // Continue rendering with null stats
   }
 
@@ -86,19 +149,30 @@ export default async function OrganizationDashboardPage({
           <Minus className="h-3 w-3" />
           {formatPercentageChange(change)} from last period
         </span>
-      )
+      );
     }
 
     return (
-      <span className={`inline-flex items-center gap-1 text-xs ${getChangeColor(change)}`}>
-        {change > 0 ? <ArrowUp className="h-3 w-3" /> : <ArrowDown className="h-3 w-3" />}
+      <span
+        className={`inline-flex items-center gap-1 text-xs ${getChangeColor(
+          change
+        )}`}
+      >
+        {change > 0 ? (
+          <ArrowUp className="h-3 w-3" />
+        ) : (
+          <ArrowDown className="h-3 w-3" />
+        )}
         {formatPercentageChange(change)} from last period
       </span>
-    )
-  }
+    );
+  };
 
   return (
     <div className="space-y-8">
+      {/* Welcome Modal (shows on first visit) */}
+      <WelcomeModal userName={userName} orgSlug={params.orgSlug} />
+
       {/* Welcome Section */}
       <div>
         <h1 className="text-3xl font-bold text-white">
@@ -108,6 +182,11 @@ export default async function OrganizationDashboardPage({
           Here's what's happening with {org.name} today
         </p>
       </div>
+
+      {/* Setup Progress (only show if not complete) */}
+      {!isSetupComplete && (
+        <SetupProgress steps={setupSteps} orgSlug={params.orgSlug} />
+      )}
 
       {/* Stats Cards */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
@@ -123,7 +202,7 @@ export default async function OrganizationDashboardPage({
           </CardHeader>
           <CardContent>
             <div className="text-3xl font-bold text-white">
-              {leadStats ? leadStats.total_leads.toLocaleString() : '0'}
+              {leadStats ? leadStats.total_leads.toLocaleString() : "0"}
             </div>
             <p className="text-xs mt-1">
               {leadStats ? (
@@ -147,7 +226,7 @@ export default async function OrganizationDashboardPage({
           </CardHeader>
           <CardContent>
             <div className="text-3xl font-bold text-white">
-              {leadStats ? leadStats.new_leads_7d.toLocaleString() : '0'}
+              {leadStats ? leadStats.new_leads_7d.toLocaleString() : "0"}
             </div>
             <p className="text-xs mt-1">
               {leadStats ? (
@@ -171,7 +250,7 @@ export default async function OrganizationDashboardPage({
           </CardHeader>
           <CardContent>
             <div className="text-3xl font-bold text-white">
-              {leadStats ? leadStats.avg_lead_score.toFixed(1) : '0.0'}
+              {leadStats ? leadStats.avg_lead_score.toFixed(1) : "0.0"}
             </div>
             <p className="text-xs mt-1">
               {leadStats ? (
@@ -195,7 +274,7 @@ export default async function OrganizationDashboardPage({
           </CardHeader>
           <CardContent>
             <div className="text-3xl font-bold text-white">
-              {leadStats ? `${leadStats.conversion_rate.toFixed(1)}%` : '0%'}
+              {leadStats ? `${leadStats.conversion_rate.toFixed(1)}%` : "0%"}
             </div>
             <p className="text-xs mt-1">
               {leadStats ? (
@@ -212,9 +291,7 @@ export default async function OrganizationDashboardPage({
       <Card>
         <CardHeader>
           <CardTitle>Quick Actions</CardTitle>
-          <CardDescription>
-            Get started with these common tasks
-          </CardDescription>
+          <CardDescription>Get started with these common tasks</CardDescription>
         </CardHeader>
         <CardContent>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -225,7 +302,9 @@ export default async function OrganizationDashboardPage({
               </p>
             </div>
             <div className="p-4 rounded-lg border border-border-primary hover:bg-bg-elevated transition-colors cursor-pointer">
-              <h4 className="font-semibold text-white mb-2">Configure Chatbot</h4>
+              <h4 className="font-semibold text-white mb-2">
+                Configure Chatbot
+              </h4>
               <p className="text-sm text-gray-400">
                 Set up your AI chatbot integration
               </p>
@@ -255,5 +334,5 @@ export default async function OrganizationDashboardPage({
         </CardContent>
       </Card>
     </div>
-  )
+  );
 }

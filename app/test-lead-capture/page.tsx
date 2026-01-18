@@ -102,7 +102,7 @@ export default function TestLeadCapturePage() {
           scenario: scenarioName || "Custom Message",
           message: testMessage,
           success: false,
-          error: error.message,
+          error: (error as Error).message,
           leadCaptured: false,
         },
         ...prev,

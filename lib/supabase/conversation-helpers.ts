@@ -130,11 +130,15 @@ export async function initializeConversation(
   if (existing) {
     // Update visitor metadata if provided
     if (Object.keys(visitorMetadata).length > 0) {
-      await updateConversationMetadata(existing.id, {
+      const updatedMetadata = {
         ...existing.visitor_metadata,
         ...visitorMetadata,
         last_seen: new Date().toISOString(),
-      });
+      };
+      await (getServiceRoleClient()
+        .from("conversations")
+        .update as any)({ visitor_metadata: updatedMetadata })
+        .eq("id", existing.id);
 
       // Return updated conversation
       const updated = await getConversation(existing.id);
@@ -161,8 +165,8 @@ export async function initializeConversation(
  * Get conversation by session ID
  */
 export async function getConversationBySession(
-  organizationId: string,
-  sessionId: string
+  sessionId: string,
+  organizationId: string
 ): Promise<Conversation | null> {
   const supabase = getServiceRoleClient();
 
@@ -255,7 +259,7 @@ export async function listConversations(
   }
 
   return {
-    conversations: data as Conversation[] | ConversationWithLead[],
+    conversations: (data as any) as Conversation[] | ConversationWithLead[],
     total: count || 0,
     limit,
     offset,
@@ -275,9 +279,9 @@ export async function updateConversationStatus(
 ): Promise<void> {
   const supabase = getServiceRoleClient();
 
-  const { error } = await supabase
+  const { error } = await (supabase
     .from("conversations")
-    .update({ status })
+    .update as any)({ status })
     .eq("id", conversationId);
 
   if (error) {
@@ -294,13 +298,14 @@ export async function updateConversationMetadata(
     intent?: ConversationIntent;
     sentiment?: ConversationSentiment;
     lead_id?: string | null;
+    visitor_metadata?: Record<string, unknown>;
   }
 ): Promise<void> {
   const supabase = getServiceRoleClient();
 
-  const { error } = await supabase
+  const { error } = await (supabase
     .from("conversations")
-    .update(updates)
+    .update as any)(updates)
     .eq("id", conversationId);
 
   if (error) {
@@ -334,9 +339,9 @@ export async function abandonStaleConversations(
   const cutoffTime = new Date();
   cutoffTime.setMinutes(cutoffTime.getMinutes() - inactiveMinutes);
 
-  const { data, error } = await supabase
+  const { data, error } = await (supabase
     .from("conversations")
-    .update({ status: "abandoned" })
+    .update as any)({ status: "abandoned" })
     .eq("organization_id", organizationId)
     .eq("status", "active")
     .lt("last_message_at", cutoffTime.toISOString())

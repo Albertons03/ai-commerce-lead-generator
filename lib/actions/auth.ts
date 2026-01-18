@@ -1,9 +1,14 @@
-'use server'
+"use server";
 
-import { revalidatePath } from 'next/cache'
-import { redirect } from 'next/navigation'
-import { createServerSupabaseClient } from '@/lib/supabase/client'
-import { loginSchema, signupSchema, type LoginInput, type SignupInput } from '@/lib/validations/auth'
+import { revalidatePath } from "next/cache";
+import { redirect } from "next/navigation";
+import { createServerSupabaseClient } from "@/lib/supabase/client";
+import {
+  loginSchema,
+  signupSchema,
+  type LoginInput,
+  type SignupInput,
+} from "@/lib/validations/auth";
 
 /**
  * =====================================================
@@ -12,9 +17,9 @@ import { loginSchema, signupSchema, type LoginInput, type SignupInput } from '@/
  */
 
 interface ActionResponse {
-  success: boolean
-  error?: string
-  field?: string
+  success: boolean;
+  error?: string;
+  field?: string;
 }
 
 /**
@@ -23,90 +28,89 @@ interface ActionResponse {
 export async function signIn(data: LoginInput): Promise<ActionResponse> {
   try {
     // Validate input
-    const validatedData = loginSchema.parse(data)
+    const validatedData = loginSchema.parse(data);
 
-    const supabase = await createServerSupabaseClient()
+    const supabase = await createServerSupabaseClient();
 
     // Sign in with Supabase Auth
-    const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
-      email: validatedData.email,
-      password: validatedData.password,
-    })
+    const { data: authData, error: authError } =
+      await supabase.auth.signInWithPassword({
+        email: validatedData.email,
+        password: validatedData.password,
+      });
 
     if (authError) {
-      console.error('Sign in error:', authError)
+      console.error("Sign in error:", authError);
 
       // Map Supabase errors to user-friendly messages
-      if (authError.message.includes('Invalid login credentials')) {
+      if (authError.message.includes("Invalid login credentials")) {
         return {
           success: false,
-          error: 'Invalid email or password',
-        }
+          error: "Invalid email or password",
+        };
       }
 
-      if (authError.message.includes('Email not confirmed')) {
+      if (authError.message.includes("Email not confirmed")) {
         return {
           success: false,
-          error: 'Please verify your email before signing in',
-        }
+          error: "Please verify your email before signing in",
+        };
       }
 
       return {
         success: false,
-        error: authError.message || 'Failed to sign in',
-      }
+        error: authError.message || "Failed to sign in",
+      };
     }
 
     if (!authData.user) {
       return {
         success: false,
-        error: 'Failed to sign in',
-      }
+        error: "Failed to sign in",
+      };
     }
 
     // Check if user profile exists in users table
     const { data: profile, error: profileError } = await supabase
-      .from('users')
-      .select('id')
-      .eq('id', authData.user.id)
-      .single()
+      .from("users")
+      .select("id")
+      .eq("id", authData.user.id)
+      .single();
 
     // If profile doesn't exist, create it
-    if (profileError && profileError.code === 'PGRST116') {
-      const { error: insertError } = await supabase
-        .from('users')
-        .insert({
-          id: authData.user.id,
-          email: authData.user.email!,
-          full_name: authData.user.user_metadata.full_name || null,
-          avatar_url: authData.user.user_metadata.avatar_url || null,
-        })
+    if (profileError && profileError.code === "PGRST116") {
+      const { error: insertError } = await supabase.from("users").insert({
+        id: authData.user.id,
+        email: authData.user.email!,
+        full_name: authData.user.user_metadata.full_name || null,
+        avatar_url: authData.user.user_metadata.avatar_url || null,
+      } as any);
 
       if (insertError) {
-        console.error('Error creating user profile:', insertError)
+        console.error("Error creating user profile:", insertError);
       }
     }
 
-    revalidatePath('/', 'layout')
+    revalidatePath("/", "layout");
 
     return {
       success: true,
-    }
+    };
   } catch (error: any) {
-    console.error('Sign in action error:', error)
+    console.error("Sign in action error:", error);
 
-    if (error.name === 'ZodError') {
+    if (error.name === "ZodError") {
       return {
         success: false,
         error: error.errors[0].message,
         field: error.errors[0].path[0],
-      }
+      };
     }
 
     return {
       success: false,
-      error: 'An unexpected error occurred',
-    }
+      error: "An unexpected error occurred",
+    };
   }
 }
 
@@ -116,9 +120,9 @@ export async function signIn(data: LoginInput): Promise<ActionResponse> {
 export async function signUp(data: SignupInput): Promise<ActionResponse> {
   try {
     // Validate input
-    const validatedData = signupSchema.parse(data)
+    const validatedData = signupSchema.parse(data);
 
-    const supabase = await createServerSupabaseClient()
+    const supabase = await createServerSupabaseClient();
 
     // Sign up with Supabase Auth
     const { data: authData, error: authError } = await supabase.auth.signUp({
@@ -128,70 +132,70 @@ export async function signUp(data: SignupInput): Promise<ActionResponse> {
         data: {
           full_name: validatedData.name,
         },
-        emailRedirectTo: `${process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'}/api/auth/callback`,
+        emailRedirectTo: `${
+          process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000"
+        }/api/auth/callback`,
       },
-    })
+    });
 
     if (authError) {
-      console.error('Sign up error:', authError)
+      console.error("Sign up error:", authError);
 
       // Map Supabase errors to user-friendly messages
-      if (authError.message.includes('already registered')) {
+      if (authError.message.includes("already registered")) {
         return {
           success: false,
-          error: 'An account with this email already exists',
-          field: 'email',
-        }
+          error: "An account with this email already exists",
+          field: "email",
+        };
       }
 
       return {
         success: false,
-        error: authError.message || 'Failed to create account',
-      }
+        error: authError.message || "Failed to create account",
+      };
     }
 
     if (!authData.user) {
       return {
         success: false,
-        error: 'Failed to create account',
-      }
+        error: "Failed to create account",
+      };
     }
 
     // Create user profile in users table
-    const { error: profileError } = await supabase
-      .from('users')
-      .insert({
-        id: authData.user.id,
-        email: authData.user.email!,
-        full_name: validatedData.name,
-        avatar_url: null,
-      })
+    const { error: profileError } = await supabase.from("users").insert({
+      id: authData.user.id,
+      email: authData.user.email!,
+      full_name: validatedData.name,
+      avatar_url: null,
+    } as any);
 
     if (profileError) {
-      console.error('Error creating user profile:', profileError)
+      console.error("Error creating user profile:", profileError);
       // Note: User is still created in auth.users, they can still sign in
     }
 
-    revalidatePath('/', 'layout')
+    revalidatePath("/", "layout");
 
     return {
       success: true,
-    }
+    };
   } catch (error: any) {
-    console.error('Sign up action error:', error)
+    console.error("Sign up action error:", error);
 
-    if (error.name === 'ZodError') {
+    if (error.name === "ZodError") {
       return {
         success: false,
         error: error.errors[0].message,
         field: error.errors[0].path[0],
-      }
+      };
     }
 
     return {
       success: false,
-      error: 'An unexpected error occurred',
-    }
+      error: "An unexpected error occurred",
+    };
   }
 }
 
@@ -200,26 +204,26 @@ export async function signUp(data: SignupInput): Promise<ActionResponse> {
  */
 export async function signOut(): Promise<ActionResponse> {
   try {
-    const supabase = await createServerSupabaseClient()
+    const supabase = await createServerSupabaseClient();
 
-    const { error } = await supabase.auth.signOut()
+    const { error } = await supabase.auth.signOut();
 
     if (error) {
-      console.error('Sign out error:', error)
+      console.error("Sign out error:", error);
       return {
         success: false,
-        error: 'Failed to sign out',
-      }
+        error: "Failed to sign out",
+      };
     }
 
-    revalidatePath('/', 'layout')
-    redirect('/login')
+    revalidatePath("/", "layout");
+    redirect("/login");
   } catch (error) {
-    console.error('Sign out action error:', error)
+    console.error("Sign out action error:", error);
     return {
       success: false,
-      error: 'An unexpected error occurred',
-    }
+      error: "An unexpected error occurred",
+    };
   }
 }
 
@@ -228,24 +232,27 @@ export async function signOut(): Promise<ActionResponse> {
  */
 export async function getCurrentUser() {
   try {
-    const supabase = await createServerSupabaseClient()
+    const supabase = await createServerSupabaseClient();
 
-    const { data: { user }, error } = await supabase.auth.getUser()
+    const {
+      data: { user },
+      error,
+    } = await supabase.auth.getUser();
 
     if (error || !user) {
-      return null
+      return null;
     }
 
     // Fetch full user profile
     const { data: profile } = await supabase
-      .from('users')
-      .select('*')
-      .eq('id', user.id)
-      .single()
+      .from("users")
+      .select("*")
+      .eq("id", user.id)
+      .single();
 
-    return profile
+    return profile;
   } catch (error) {
-    console.error('Get current user error:', error)
-    return null
+    console.error("Get current user error:", error);
+    return null;
   }
 }

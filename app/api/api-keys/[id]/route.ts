@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServerSupabaseClient } from '@/lib/supabase/client'
+import type { ApiKeyUpdate } from '@/lib/supabase/types'
 
 /**
  * =====================================================
@@ -75,12 +76,12 @@ export async function DELETE(
     }
 
     // Verify user is admin or owner of the organization
-    const { data: membership, error: membershipError } = await supabase
+    const { data: membership, error: membershipError } = (await supabase
       .from('organization_members')
       .select('role')
       .eq('organization_id', organization_id)
       .eq('user_id', user.id)
-      .single()
+      .single()) as { data: { role: string } | null; error: any }
 
     if (membershipError || !membership) {
       return NextResponse.json(
@@ -103,12 +104,12 @@ export async function DELETE(
     }
 
     // Check if the API key exists and belongs to the organization
-    const { data: existingKey, error: fetchError } = await supabase
+    const { data: existingKey, error: fetchError } = (await supabase
       .from('api_keys')
       .select('id, organization_id, name, is_active')
       .eq('id', apiKeyId)
       .eq('organization_id', organization_id)
-      .single()
+      .single()) as { data: { id: string; organization_id: string; name: string; is_active: boolean } | null; error: any }
 
     if (fetchError || !existingKey) {
       return NextResponse.json(
@@ -134,7 +135,7 @@ export async function DELETE(
     }
 
     // Revoke the API key (soft delete)
-    const { error: updateError } = await supabase
+    const updateResult = (await (supabase as any)
       .from('api_keys')
       .update({
         is_active: false,
@@ -142,7 +143,9 @@ export async function DELETE(
         revoked_by: user.id,
       })
       .eq('id', apiKeyId)
-      .eq('organization_id', organization_id)
+      .eq('organization_id', organization_id)) as { error: any }
+
+    const { error: updateError } = updateResult
 
     if (updateError) {
       console.error('Error revoking API key:', updateError)
@@ -255,12 +258,12 @@ export async function GET(
     }
 
     // Verify user has access to this organization
-    const { data: membership, error: membershipError } = await supabase
+    const { data: membership, error: membershipError } = (await supabase
       .from('organization_members')
       .select('role')
       .eq('organization_id', organization_id)
       .eq('user_id', user.id)
-      .single()
+      .single()) as { data: { role: string } | null; error: any }
 
     if (membershipError || !membership) {
       return NextResponse.json(
@@ -273,7 +276,7 @@ export async function GET(
     }
 
     // Fetch the API key
-    const { data: apiKey, error: fetchError } = await supabase
+    const { data: apiKey, error: fetchError } = (await supabase
       .from('api_keys')
       .select(
         `
@@ -291,7 +294,21 @@ export async function GET(
       )
       .eq('id', apiKeyId)
       .eq('organization_id', organization_id)
-      .single()
+      .single()) as {
+        data: {
+          id: string;
+          name: string;
+          key_prefix: string;
+          is_active: boolean;
+          last_used_at: string | null;
+          usage_count: number;
+          created_at: string;
+          allowed_domains: string[];
+          rate_limit_per_minute: number;
+          revoked_at: string | null
+        } | null;
+        error: any
+      }
 
     if (fetchError || !apiKey) {
       return NextResponse.json(

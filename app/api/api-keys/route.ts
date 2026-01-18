@@ -61,12 +61,12 @@ export async function GET(request: NextRequest) {
     const { organization_id: orgId } = validation.data
 
     // Verify user has access to this organization
-    const { data: membership, error: membershipError } = await supabase
+    const { data: membership, error: membershipError } = (await supabase
       .from('organization_members')
       .select('role')
       .eq('organization_id', orgId)
       .eq('user_id', user.id)
-      .single()
+      .single()) as { data: { role: string } | null; error: any }
 
     if (membershipError || !membership) {
       return NextResponse.json(
@@ -80,7 +80,7 @@ export async function GET(request: NextRequest) {
 
     // Fetch API keys for the organization
     // RLS policies will ensure user can only see keys for their organizations
-    const { data: apiKeys, error: keysError } = await supabase
+    const { data: apiKeys, error: keysError } = (await supabase
       .from('api_keys')
       .select(
         `
@@ -97,7 +97,21 @@ export async function GET(request: NextRequest) {
       `
       )
       .eq('organization_id', orgId)
-      .order('created_at', { ascending: false })
+      .order('created_at', { ascending: false })) as {
+        data: Array<{
+          id: string;
+          name: string;
+          key_prefix: string;
+          is_active: boolean;
+          last_used_at: string | null;
+          usage_count: number;
+          created_at: string;
+          allowed_domains: string[];
+          rate_limit_per_minute: number;
+          revoked_at: string | null;
+        }> | null;
+        error: any;
+      }
 
     if (keysError) {
       console.error('Error fetching API keys:', keysError)
@@ -204,12 +218,12 @@ export async function POST(request: NextRequest) {
     const { organization_id, name, allowed_domains, rate_limit_per_minute } = validation.data
 
     // Verify user is admin or owner of the organization
-    const { data: membership, error: membershipError } = await supabase
+    const { data: membership, error: membershipError } = (await supabase
       .from('organization_members')
       .select('role')
       .eq('organization_id', organization_id)
       .eq('user_id', user.id)
-      .single()
+      .single()) as { data: { role: string } | null; error: any }
 
     if (membershipError || !membership) {
       return NextResponse.json(
@@ -264,18 +278,20 @@ export async function POST(request: NextRequest) {
     const { key, hash, prefix, lastFour } = await generateAndHashApiKey()
 
     // Insert the API key into the database
-    const { data: apiKey, error: insertError } = await supabase
+    const insertData: any = {
+      organization_id,
+      name,
+      key_prefix: prefix,
+      key_hash: hash,
+      allowed_domains: allowed_domains || [],
+      rate_limit_per_minute: rate_limit_per_minute || 10,
+      is_active: true,
+      created_by: user.id,
+    }
+
+    const insertResult = (await supabase
       .from('api_keys')
-      .insert({
-        organization_id,
-        name,
-        key_prefix: prefix,
-        key_hash: hash,
-        allowed_domains: allowed_domains || [],
-        rate_limit_per_minute: rate_limit_per_minute || 10,
-        is_active: true,
-        created_by: user.id,
-      })
+      .insert(insertData)
       .select(
         `
         id,
@@ -286,15 +302,27 @@ export async function POST(request: NextRequest) {
         rate_limit_per_minute
       `
       )
-      .single()
+      .single()) as {
+        data: {
+          id: string;
+          name: string;
+          key_prefix: string;
+          created_at: string;
+          allowed_domains: string[];
+          rate_limit_per_minute: number
+        } | null;
+        error: any
+      }
 
-    if (insertError) {
+    const { data: apiKey, error: insertError } = insertResult
+
+    if (insertError || !apiKey) {
       console.error('Error creating API key:', insertError)
       return NextResponse.json(
         {
           success: false,
           error: 'Failed to create API key',
-          message: insertError.message,
+          message: insertError?.message || 'Unknown error',
         },
         { status: 500 }
       )

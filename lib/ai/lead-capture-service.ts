@@ -156,7 +156,7 @@ export async function detectLeadTriggers(
     // Check for strong purchase intent
     if (
       LEAD_TRIGGER_CONFIG.STRONG_PURCHASE_INTENTS.includes(
-        intentAnalysis.intent
+        intentAnalysis.intent as any
       )
     ) {
       triggers.push({
@@ -596,16 +596,16 @@ export async function captureLeadFromConversation(
       },
     };
 
-    const lead = await createLead(leadData);
+    const leadResult = await createLead(leadData);
 
     console.log("[Lead Capture] Lead created successfully:", {
-      lead_id: lead.id,
+      lead_id: leadResult?.data?.id,
       score,
       trigger_count: triggers.length,
     });
 
     return {
-      lead_id: lead.id,
+      lead_id: leadResult?.data?.id || "",
       trigger: triggers[0], // Primary trigger
       score,
       score_factors: factors,

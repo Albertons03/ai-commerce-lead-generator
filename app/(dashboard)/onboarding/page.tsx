@@ -42,11 +42,11 @@ export default function OnboardingPage() {
         }
 
         // Get user profile for personalized greeting
-        const { data: profile } = await supabase
+        const { data: profile } = (await supabase
           .from('users')
           .select('full_name, email')
           .eq('id', user.id)
-          .single()
+          .single()) as { data: { full_name: string | null; email: string } | null }
 
         setUserName(profile?.full_name || user.email?.split('@')[0] || 'there')
       } catch (error) {

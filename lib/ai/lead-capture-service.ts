@@ -10,6 +10,8 @@
 import { analyzeMessageIntent } from "./chat-service";
 import { createLead } from "../supabase/leads-helpers";
 import { getMessages } from "../supabase/message-helpers";
+import { sendLeadNotificationEmail } from "../email/lead-notification";
+import { createAdminSupabaseClient } from "../supabase/client";
 
 // =====================================================
 // Types & Interfaces
@@ -604,6 +606,24 @@ export async function captureLeadFromConversation(
       trigger_count: triggers.length,
     });
 
+    // Email értesítés küldése az org ownernek.
+    // "fire and forget": nem várjuk meg, nem dobja ki a hibát ha sikertelen.
+    // await nélkül indul el háttérben, a válasz nem késik miatta.
+    const orgName = await getOrgName(context.organization_id);
+    sendLeadNotificationEmail({
+      lead_id:              leadResult?.data?.id ?? "",
+      lead_name:            leadData.name,
+      lead_email:           leadData.email,
+      lead_phone:           leadData.phone || undefined,
+      lead_company:         leadData.company || undefined,
+      lead_score:           Math.round(score),
+      conversation_summary: leadData.conversation_summary ?? undefined,
+      product_interests:    context.product_interests,
+      trigger_type:         triggers[0].type,
+      organization_id:      context.organization_id,
+      organization_name:    orgName,
+    }).catch(err => console.error("[Lead Capture] Email notification failed:", err));
+
     return {
       lead_id: leadResult?.data?.id || "",
       trigger: triggers[0], // Primary trigger
@@ -707,5 +727,24 @@ function generateConversationSummary(context: LeadCaptureContext): string {
 }
 
 // =====================================================
-// Functions exported inline above
+// Helper: Organization név lekérése
 // =====================================================
+
+/**
+ * Lekéri az organization nevét az email subject sorához.
+ * Ha nem sikerül, "Your Organization" fallback-et ad vissza.
+ */
+async function getOrgName(organizationId: string): Promise<string> {
+  try {
+    const supabase = createAdminSupabaseClient();
+    const { data } = await supabase
+      .from("organizations")
+      .select("name")
+      .eq("id", organizationId)
+      .single() as { data: { name: string } | null };
+
+    return data?.name ?? "Your Organization";
+  } catch {
+    return "Your Organization";
+  }
+}

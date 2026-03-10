@@ -2,12 +2,13 @@
 
 import React, { useState, useEffect } from "react";
 import { useParams } from "next/navigation";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
+import { Copy, Check, Code2 } from "lucide-react";
 
 interface Message {
   role: "user" | "assistant";
@@ -42,6 +43,10 @@ export default function ChatbotPage() {
     avgScore: 0,
   });
 
+  // Embed kód szekció állapota
+  const [apiKeys, setApiKeys] = useState<{ id: string; name: string; masked_key: string }[]>([]);
+  const [copiedEmbed, setCopiedEmbed] = useState(false);
+
   // Initialize conversation
   useEffect(() => {
     initializeChat();
@@ -64,6 +69,13 @@ export default function ChatbotPage() {
 
       const org = orgData.data[0];
       setOrganization(org);
+
+      // API kulcsok betöltése az embed kód generálásához
+      const keysRes = await fetch(`/api/api-keys?organization_id=${org.id}`);
+      if (keysRes.ok) {
+        const keysData = await keysRes.json();
+        if (keysData.success) setApiKeys(keysData.data || []);
+      }
 
       // Create or resume conversation
       const convResponse = await fetch("/api/conversations", {
@@ -195,7 +207,7 @@ export default function ChatbotPage() {
               : "Loading..."}
           </p>
         </div>
-        <div className="flex items-center gap-4">
+        <div className="flex items-center gap-3">
           <div className="flex items-center gap-2">
             <div
               className={`w-2 h-2 rounded-full ${
@@ -221,6 +233,16 @@ export default function ChatbotPage() {
           )}
         </div>
       </div>
+
+      {/* ── EMBED KÓD GENERATOR ── */}
+      {organization && (
+        <EmbedCodeCard
+          orgId={organization.id}
+          apiKeys={apiKeys}
+          copiedEmbed={copiedEmbed}
+          setCopiedEmbed={setCopiedEmbed}
+        />
+      )}
 
       <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
         {/* Chat Interface */}
@@ -451,5 +473,106 @@ export default function ChatbotPage() {
         </div>
       </div>
     </div>
+  );
+}
+
+// =====================================================
+// EMBED KÓD GENERATOR KOMPONENS
+// =====================================================
+// Külön komponensként van kiszervezve, hogy a ChatbotPage
+// ne legyen túl hosszú (single responsibility elv).
+// Props-on keresztül kapja az adatokat a szülő komponenstől.
+
+interface EmbedCodeCardProps {
+  orgId: string;
+  apiKeys: { id: string; name: string; masked_key: string }[];
+  copiedEmbed: boolean;
+  setCopiedEmbed: (v: boolean) => void;
+}
+
+function EmbedCodeCard({ orgId, apiKeys, copiedEmbed, setCopiedEmbed }: EmbedCodeCardProps) {
+  // Az első aktív API kulcsot használjuk az embed kódban
+  // Ha nincs kulcs, placeholder szöveget mutatunk
+  const firstKey = apiKeys[0];
+  const displayKey = firstKey ? firstKey.masked_key : "YOUR_API_KEY";
+
+  // Az embed script tag amit a felhasználó a saját oldalára másol
+  // window.location.origin = pl. "https://app.leadgen.com"
+  const embedCode = `<script
+  src="${typeof window !== "undefined" ? window.location.origin : ""}/widget.js"
+  data-api-key="${displayKey}"
+  data-org-id="${orgId}"
+  data-title="Chat with us"
+  data-theme="#6366f1"
+></script>`;
+
+  async function handleCopy() {
+    try {
+      await navigator.clipboard.writeText(embedCode);
+      setCopiedEmbed(true);
+      // 2 másodperc után visszaáll a "Copy" felirat
+      setTimeout(() => setCopiedEmbed(false), 2000);
+    } catch {
+      // Clipboard API nem elérhető (pl. nem HTTPS) - fallback
+      console.error("Clipboard copy failed");
+    }
+  }
+
+  return (
+    <Card>
+      <CardHeader className="pb-3">
+        <div className="flex items-center gap-2">
+          <Code2 className="h-5 w-5 text-muted-foreground" />
+          <div>
+            <CardTitle className="text-base">Embed on Your Website</CardTitle>
+            <CardDescription className="text-sm mt-0.5">
+              Copy this snippet and paste it before the{" "}
+              <code className="text-xs bg-muted px-1 py-0.5 rounded">&lt;/body&gt;</code>{" "}
+              tag on any page where you want the chatbot to appear.
+            </CardDescription>
+          </div>
+        </div>
+      </CardHeader>
+      <CardContent className="space-y-3">
+        {/* Figyelmeztetés ha nincs még API kulcs */}
+        {apiKeys.length === 0 && (
+          <div className="text-sm text-yellow-600 bg-yellow-50 border border-yellow-200 rounded-md px-3 py-2">
+            No API key found. Generate one in{" "}
+            <a
+              href="settings/api-keys"
+              className="underline font-medium"
+            >
+              Settings → API Keys
+            </a>{" "}
+            to get a real embed code.
+          </div>
+        )}
+
+        {/* Kód blokk + másolás gomb */}
+        <div className="relative">
+          <pre className="bg-muted rounded-md p-4 text-xs overflow-x-auto leading-relaxed">
+            <code>{embedCode}</code>
+          </pre>
+          <Button
+            size="sm"
+            variant="outline"
+            className="absolute top-2 right-2"
+            onClick={handleCopy}
+            disabled={apiKeys.length === 0}
+          >
+            {copiedEmbed ? (
+              <><Check className="h-3 w-3 mr-1" /> Copied!</>
+            ) : (
+              <><Copy className="h-3 w-3 mr-1" /> Copy</>
+            )}
+          </Button>
+        </div>
+
+        <p className="text-xs text-muted-foreground">
+          The widget loads asynchronously and will not slow down your page.
+          Theme color and title can be customized via the <code>data-*</code> attributes.
+        </p>
+      </CardContent>
+    </Card>
   );
 }

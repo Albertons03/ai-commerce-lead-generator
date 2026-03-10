@@ -44,7 +44,7 @@ export default function ChatbotPage() {
   });
 
   // Embed kód szekció állapota
-  const [apiKeys, setApiKeys] = useState<{ id: string; name: string; masked_key: string }[]>([]);
+  const [apiKeys, setApiKeys] = useState<{ id: string; name: string; key_display: string }[]>([]);
   const [copiedEmbed, setCopiedEmbed] = useState(false);
 
   // Initialize conversation
@@ -485,16 +485,16 @@ export default function ChatbotPage() {
 
 interface EmbedCodeCardProps {
   orgId: string;
-  apiKeys: { id: string; name: string; masked_key: string }[];
+  apiKeys: { id: string; name: string; key_display: string }[];
   copiedEmbed: boolean;
   setCopiedEmbed: (v: boolean) => void;
 }
 
 function EmbedCodeCard({ orgId, apiKeys, copiedEmbed, setCopiedEmbed }: EmbedCodeCardProps) {
   // Az első aktív API kulcsot használjuk az embed kódban
-  // Ha nincs kulcs, placeholder szöveget mutatunk
+  // key_display = a maskolt kulcs prefix (pl. sk_live_KF8J...)
   const firstKey = apiKeys[0];
-  const displayKey = firstKey ? firstKey.masked_key : "YOUR_API_KEY";
+  const displayKey = firstKey ? firstKey.key_display : "YOUR_API_KEY";
 
   // Az embed script tag amit a felhasználó a saját oldalára másol
   // window.location.origin = pl. "https://app.leadgen.com"

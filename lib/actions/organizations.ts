@@ -12,6 +12,7 @@ import {
   updateMemberRole,
   removeOrganizationMember,
 } from '@/lib/supabase/helpers'
+import { createAdminSupabaseClient } from '@/lib/supabase/client'
 import {
   createOrganizationSchema,
   updateOrganizationSchema,
@@ -53,8 +54,21 @@ export async function createOrganizationAction(
       return { success: false, error: 'You must be logged in to create an organization' }
     }
 
-    // Check if slug is already taken
-    const { data: existingOrg } = await supabase
+    // Ensure user profile exists in public.users before calling the RPC.
+    // The handle_new_user trigger should do this automatically on signup,
+    // but it can fail silently. We upsert here as a failsafe.
+    const adminClient = createAdminSupabaseClient()
+    await adminClient.from('users').upsert({
+      id: user.id,
+      email: user.email!,
+      full_name: user.user_metadata?.full_name || null,
+      avatar_url: user.user_metadata?.avatar_url || null,
+    }, { onConflict: 'id' })
+
+    // Check if slug is already taken - use admin client because RLS prevents
+    // seeing orgs the user is not a member of, which would cause a silent
+    // false-negative and later a 23505 duplicate key error from the DB.
+    const { data: existingOrg } = await adminClient
       .from('organizations')
       .select('id')
       .eq('slug', validatedData.slug)
@@ -77,10 +91,14 @@ export async function createOrganizationAction(
     })
 
     if (createError || !org) {
-      console.error('Create organization error:', createError)
+      console.error('Create organization error:', JSON.stringify(createError))
+      // 23505 = unique constraint violation (slug already taken)
+      if (createError?.code === '23505') {
+        return { success: false, error: 'This organization slug is already taken', field: 'slug' }
+      }
       return {
         success: false,
-        error: 'Failed to create organization',
+        error: createError?.message || 'Failed to create organization',
       }
     }
 

@@ -58,7 +58,7 @@ export async function createOrganizationAction(
     // The handle_new_user trigger should do this automatically on signup,
     // but it can fail silently. We upsert here as a failsafe.
     const adminClient = createAdminSupabaseClient()
-    await adminClient.from('users').upsert({
+    await (adminClient.from('users').upsert as any)({
       id: user.id,
       email: user.email!,
       full_name: user.user_metadata?.full_name || null,

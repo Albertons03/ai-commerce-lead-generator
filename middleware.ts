@@ -80,7 +80,10 @@ export async function middleware(request: NextRequest) {
     pathname.startsWith("/login") || pathname.startsWith("/signup");
   const isTestRoute = pathname.startsWith("/test-");
   const isPublicRoute =
-    pathname === "/" || pathname.startsWith("/api") || isTestRoute;
+    pathname === "/" ||
+    pathname.startsWith("/api") ||
+    pathname.endsWith(".js") ||   // public static JS files (widget.js etc.)
+    isTestRoute;
   const isApiRoute = pathname.startsWith("/api");
   // Dashboard routes: /dashboard, /onboarding, or /{orgSlug}/... BUT NOT auth routes
   const isDashboardRoute =

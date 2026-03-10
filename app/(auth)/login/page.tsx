@@ -1,3 +1,4 @@
+import { Suspense } from 'react'
 import { LoginForm } from '@/components/auth/login-form'
 import { Metadata } from 'next'
 
@@ -7,5 +8,10 @@ export const metadata: Metadata = {
 }
 
 export default function LoginPage() {
-  return <LoginForm />
+  // useSearchParams() in LoginForm requires a Suspense boundary during static generation
+  return (
+    <Suspense>
+      <LoginForm />
+    </Suspense>
+  )
 }

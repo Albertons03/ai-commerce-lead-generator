@@ -62,11 +62,14 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    const { organization_id, session_id, visitor_metadata } = validation.data;
+    const sessionId = session_id || generateSessionId();
+
     // Extract visitor metadata from request
     const autoMetadata = extractVisitorMetadata(request);
     const combinedMetadata = {
       ...autoMetadata,
-      ...visitor_metadata,
+      ...(visitor_metadata || {}),
     };
 
     // Initialize conversation (creates new or returns existing)

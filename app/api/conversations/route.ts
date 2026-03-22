@@ -62,25 +62,6 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const { organization_id, session_id, visitor_metadata } = validation.data;
-
-    // Generate or validate session ID
-    let sessionId = session_id;
-    if (!sessionId) {
-      sessionId = generateSessionId();
-    } else if (!isValidSessionId(sessionId)) {
-      return NextResponse.json(
-        {
-          success: false,
-          error: {
-            code: 'invalid_session_id',
-            message: 'Session ID must be a valid UUID',
-          },
-        },
-        { status: 400 }
-      );
-    }
-
     // Extract visitor metadata from request
     const autoMetadata = extractVisitorMetadata(request);
     const combinedMetadata = {

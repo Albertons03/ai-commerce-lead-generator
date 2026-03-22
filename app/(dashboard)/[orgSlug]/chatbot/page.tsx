@@ -125,7 +125,14 @@ export default function ChatbotPage() {
       timestamp: new Date(),
     };
 
-    setMessages((prev) => [...prev, userMessage]);
+    // Placeholder assistant üzenet - streaming közben folyamatosan frissül
+    const assistantPlaceholder: Message = {
+      role: "assistant",
+      content: "",
+      timestamp: new Date(),
+    };
+
+    setMessages((prev) => [...prev, userMessage, assistantPlaceholder]);
     setCurrentMessage("");
     setIsLoading(true);
 
@@ -137,53 +144,93 @@ export default function ChatbotPage() {
           message: currentMessage,
           conversation_id: conversationId,
           organization_id: organization?.id,
+          stream: true, // SSE streaming kérése
           include_products: true,
           max_products: 5,
           similarity_threshold: 0.7,
         }),
       });
 
-      if (!response.ok) {
-        throw new Error("Failed to send message");
-      }
+      if (!response.ok) throw new Error("Failed to send message");
 
-      const data = await response.json();
+      // SSE stream olvasás ReadableStream reader-rel
+      const reader = response.body!.getReader();
+      const decoder = new TextDecoder();
+      let buffer = "";
+      let streamedContent = "";
 
-      if (data.success) {
-        const assistantMessage: Message = {
-          role: "assistant",
-          content: data.data.assistant_message,
-          timestamp: new Date(),
-          leadCaptured: !!data.data.lead_capture,
-          leadScore: data.data.lead_capture?.score,
-        };
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
 
-        setMessages((prev) => [...prev, assistantMessage]);
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split("\n");
+        buffer = lines.pop() ?? "";
 
-        // Update stats
-        setSessionStats((prev) => ({
-          messages: prev.messages + 1,
-          leadsGenerated:
-            prev.leadsGenerated + (data.data.lead_capture ? 1 : 0),
-          avgScore: data.data.lead_capture
-            ? (prev.avgScore * prev.leadsGenerated +
-                data.data.lead_capture.score) /
-              (prev.leadsGenerated + 1)
-            : prev.avgScore,
-        }));
+        for (const line of lines) {
+          if (!line.startsWith("data: ")) continue;
+          const jsonStr = line.slice(6).trim();
+          if (!jsonStr) continue;
 
-        if (data.data.lead_capture) {
-          setTotalLeads((prev) => prev + 1);
+          try {
+            const event = JSON.parse(jsonStr);
+
+            if (event.type === "chunk" && event.content) {
+              // Chunk érkezés: frissítjük az utolsó üzenetet (az assistant placeholder-t)
+              streamedContent += event.content;
+              setMessages((prev) => {
+                const updated = [...prev];
+                updated[updated.length - 1] = {
+                  ...updated[updated.length - 1],
+                  content: streamedContent,
+                };
+                return updated;
+              });
+            } else if (event.type === "done") {
+              // Stream vége: végleges tartalom + lead capture metadata
+              setMessages((prev) => {
+                const updated = [...prev];
+                updated[updated.length - 1] = {
+                  ...updated[updated.length - 1],
+                  content: event.assistant_message || streamedContent,
+                  leadCaptured: !!event.lead_capture,
+                  leadScore: event.lead_capture?.score,
+                };
+                return updated;
+              });
+
+              // Session stats frissítése
+              if (event.lead_capture) {
+                setTotalLeads((prev) => prev + 1);
+                setSessionStats((prev) => ({
+                  messages: prev.messages + 1,
+                  leadsGenerated: prev.leadsGenerated + 1,
+                  avgScore:
+                    (prev.avgScore * prev.leadsGenerated + event.lead_capture.score) /
+                    (prev.leadsGenerated + 1),
+                }));
+              } else {
+                setSessionStats((prev) => ({
+                  ...prev,
+                  messages: prev.messages + 1,
+                }));
+              }
+            }
+          } catch {
+            // Nem valid JSON sor - kihagyjuk
+          }
         }
       }
     } catch (error) {
       console.error("Failed to send message:", error);
-      const errorMessage: Message = {
-        role: "assistant",
-        content: "Sorry, I encountered an error. Please try again.",
-        timestamp: new Date(),
-      };
-      setMessages((prev) => [...prev, errorMessage]);
+      setMessages((prev) => {
+        const updated = [...prev];
+        updated[updated.length - 1] = {
+          ...updated[updated.length - 1],
+          content: "Sorry, I encountered an error. Please try again.",
+        };
+        return updated;
+      });
     } finally {
       setIsLoading(false);
     }

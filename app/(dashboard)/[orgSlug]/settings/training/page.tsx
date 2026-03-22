@@ -13,8 +13,8 @@
  * 5. Eredmény megjelenítése (hány termék ment be, hány hibázott)
  */
 
-import React, { useState, useRef, useCallback } from "react";
-import { useParams } from "next/navigation";
+import React, { useState, useRef, useCallback, useEffect } from "react";
+import { useParams, useSearchParams } from "next/navigation";
 import {
   Card,
   CardContent,
@@ -24,6 +24,7 @@ import {
 } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Input } from "@/components/ui/input";
 import {
   Upload,
   FileText,
@@ -32,6 +33,10 @@ import {
   AlertTriangle,
   RotateCcw,
   Sparkles,
+  ShoppingBag,
+  RefreshCw,
+  Link as LinkIcon,
+  Unlink,
 } from "lucide-react";
 import { getOrganizationBySlug } from "@/lib/supabase/helpers";
 import { createBrowserSupabaseClient } from "@/lib/supabase/client";
@@ -226,11 +231,36 @@ function parseCsv(csvText: string): ParseResult {
 // FŐKOMPONENS
 // =====================================================
 
+// =====================================================
+// SHOPIFY KAPCSOLAT TÍPUSOK
+// =====================================================
+
+interface ShopifyStatus {
+  connected: boolean;
+  shop_domain?: string;
+  installed_at?: string;
+  last_sync?: {
+    synced_at: string;
+    products_count: number;
+    status: "success" | "failed" | "partial";
+    error?: string;
+  } | null;
+}
+
+interface ShopifySyncResult {
+  products_count: number;
+  inserted: number;
+  updated: number;
+  failed: number;
+  duration_ms: number;
+}
+
 export default function TrainingPage() {
   const params = useParams();
+  const searchParams = useSearchParams();
   const orgSlug = params.orgSlug as string;
 
-  // ── Állapot ──
+  // ── CSV állapot ──
   const [isDragging, setIsDragging]           = useState(false);
   const [parseResult, setParseResult]         = useState<ParseResult | null>(null);
   const [fileName, setFileName]               = useState<string>("");
@@ -239,8 +269,44 @@ export default function TrainingPage() {
   const [trainError, setTrainError]           = useState<string>("");
   const [overwriteExisting, setOverwriteExisting] = useState(false);
 
+  // ── Shopify állapot ──
+  const [shopifyStatus, setShopifyStatus]     = useState<ShopifyStatus | null>(null);
+  const [shopDomainInput, setShopDomainInput] = useState("");
+  const [isSyncing, setIsSyncing]             = useState(false);
+  const [syncResult, setSyncResult]           = useState<ShopifySyncResult | null>(null);
+  const [syncError, setSyncError]             = useState<string>("");
+  const [orgId, setOrgId]                     = useState<string>("");
+
   // fileInputRef: programatikusan megnyitjuk a fájlválasztót a "Browse" gombra
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // ── Org ID + Shopify státusz betöltése ──
+  useEffect(() => {
+    async function loadOrgAndShopify() {
+      const supabase = createBrowserSupabaseClient();
+      const { data: org } = await getOrganizationBySlug(supabase, orgSlug);
+      if (!org) return;
+
+      setOrgId(org.id);
+
+      // Shopify kapcsolat státusz lekérése
+      const res = await fetch(`/api/shopify/status?organization_id=${org.id}`);
+      if (res.ok) {
+        const data = await res.json();
+        if (data.success) setShopifyStatus(data.data);
+      }
+
+      // Ha a Shopify callback ide irányított vissza (?shopify=connected), frissítjük az állapotot
+      if (searchParams.get("shopify") === "connected") {
+        const refreshRes = await fetch(`/api/shopify/status?organization_id=${org.id}`);
+        if (refreshRes.ok) {
+          const refreshData = await refreshRes.json();
+          if (refreshData.success) setShopifyStatus(refreshData.data);
+        }
+      }
+    }
+    loadOrgAndShopify();
+  }, [orgSlug, searchParams]);
 
   // ── CSV feldolgozás ──
 
@@ -365,6 +431,61 @@ export default function TrainingPage() {
     setTrainError("");
   }
 
+  // ── Shopify handlerek ──
+
+  /**
+   * Shopify OAuth flow indítása.
+   * Átirányítunk az /api/shopify/install-ra, ami a Shopify OAuth oldalra visz.
+   */
+  function handleShopifyConnect() {
+    const domain = shopDomainInput.trim().toLowerCase();
+    if (!domain || !orgId) return;
+
+    // Ha a user csak a nevét írta be (.myshopify.com nélkül), hozzáadjuk
+    const shopDomain = domain.includes(".myshopify.com")
+      ? domain
+      : `${domain}.myshopify.com`;
+
+    // Teljes oldal redirect (nem fetch) - mert OAuth-nál böngésző átirányítás kell
+    window.location.href = `/api/shopify/install?shop=${encodeURIComponent(shopDomain)}&org_id=${orgId}`;
+  }
+
+  /**
+   * Shopify termék szinkronizálás indítása.
+   */
+  async function handleShopifySync() {
+    if (!orgId || isSyncing) return;
+    setIsSyncing(true);
+    setSyncError("");
+    setSyncResult(null);
+
+    try {
+      const res = await fetch("/api/shopify/sync", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ organization_id: orgId }),
+      });
+
+      const data = await res.json();
+
+      if (data.success) {
+        setSyncResult(data.data);
+        // Frissítjük a státuszt (utolsó sync dátum megjelenik)
+        const statusRes = await fetch(`/api/shopify/status?organization_id=${orgId}`);
+        if (statusRes.ok) {
+          const statusData = await statusRes.json();
+          if (statusData.success) setShopifyStatus(statusData.data);
+        }
+      } else {
+        setSyncError(data.error?.message || "Sync failed.");
+      }
+    } catch {
+      setSyncError("Network error. Please try again.");
+    } finally {
+      setIsSyncing(false);
+    }
+  }
+
   // =====================================================
   // RENDER
   // =====================================================
@@ -388,6 +509,127 @@ export default function TrainingPage() {
             </div>
           </div>
         </CardHeader>
+      </Card>
+
+      {/* ── SHOPIFY INTEGRÁCIÓ ── */}
+      <Card>
+        <CardHeader>
+          <div className="flex items-center gap-3">
+            <div className="h-10 w-10 rounded-lg bg-[#96bf48] flex items-center justify-center">
+              <ShoppingBag className="h-5 w-5 text-white" />
+            </div>
+            <div>
+              <CardTitle className="text-base">Import from Shopify</CardTitle>
+              <CardDescription>
+                Connect your Shopify store to automatically sync products to your AI chatbot.
+              </CardDescription>
+            </div>
+          </div>
+        </CardHeader>
+        <CardContent>
+
+          {/* Nem csatlakoztatott állapot */}
+          {shopifyStatus && !shopifyStatus.connected && (
+            <div className="space-y-3">
+              <p className="text-sm text-muted-foreground">
+                Enter your Shopify store name to connect. You&apos;ll be redirected to Shopify to authorize access.
+              </p>
+              <div className="flex gap-2">
+                <div className="relative flex-1 max-w-sm">
+                  <Input
+                    value={shopDomainInput}
+                    onChange={(e) => setShopDomainInput(e.target.value)}
+                    placeholder="your-store"
+                    onKeyDown={(e) => e.key === "Enter" && handleShopifyConnect()}
+                  />
+                  {/* Suffix: .myshopify.com vizuális jelzés */}
+                  <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-muted-foreground pointer-events-none">
+                    .myshopify.com
+                  </span>
+                </div>
+                <Button
+                  onClick={handleShopifyConnect}
+                  disabled={!shopDomainInput.trim()}
+                  className="gap-2"
+                >
+                  <LinkIcon className="h-4 w-4" />
+                  Connect Shopify
+                </Button>
+              </div>
+            </div>
+          )}
+
+          {/* Csatlakoztatott állapot */}
+          {shopifyStatus?.connected && (
+            <div className="space-y-4">
+              {/* Státusz sor */}
+              <div className="flex items-center justify-between flex-wrap gap-3">
+                <div className="flex items-center gap-2">
+                  <div className="w-2 h-2 rounded-full bg-green-500" />
+                  <span className="text-sm font-medium">{shopifyStatus.shop_domain}</span>
+                  <Badge variant="secondary" className="text-xs">Connected</Badge>
+                </div>
+                <Button
+                  onClick={handleShopifySync}
+                  disabled={isSyncing}
+                  size="sm"
+                  className="gap-2"
+                >
+                  <RefreshCw className={`h-4 w-4 ${isSyncing ? "animate-spin" : ""}`} />
+                  {isSyncing ? "Syncing..." : "Sync Products"}
+                </Button>
+              </div>
+
+              {/* Utolsó szinkronizáció info */}
+              {shopifyStatus.last_sync && (
+                <div className="text-xs text-muted-foreground bg-muted rounded-md px-3 py-2">
+                  Last sync:{" "}
+                  <span className="font-medium">
+                    {new Date(shopifyStatus.last_sync.synced_at).toLocaleString()}
+                  </span>
+                  {" · "}
+                  <span className="font-medium">{shopifyStatus.last_sync.products_count} products</span>
+                  {" · "}
+                  <Badge
+                    variant={shopifyStatus.last_sync.status === "success" ? "default" : "destructive"}
+                    className="text-xs ml-1"
+                  >
+                    {shopifyStatus.last_sync.status}
+                  </Badge>
+                </div>
+              )}
+
+              {/* Sync eredmény */}
+              {syncResult && (
+                <div className="bg-green-50 border border-green-200 rounded-md p-3">
+                  <p className="text-sm font-medium text-green-800 mb-1">Sync complete!</p>
+                  <div className="flex gap-4 text-xs text-green-700">
+                    <span>{syncResult.products_count} fetched</span>
+                    <span>{syncResult.inserted} inserted</span>
+                    <span>{syncResult.updated} updated</span>
+                    {syncResult.failed > 0 && (
+                      <span className="text-red-600">{syncResult.failed} failed</span>
+                    )}
+                    <span>{(syncResult.duration_ms / 1000).toFixed(1)}s</span>
+                  </div>
+                </div>
+              )}
+
+              {/* Sync hiba */}
+              {syncError && (
+                <div className="bg-red-50 border border-red-200 rounded-md p-3">
+                  <p className="text-sm text-red-700">{syncError}</p>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Betöltés közben */}
+          {shopifyStatus === null && (
+            <div className="h-8 bg-muted animate-pulse rounded-md" />
+          )}
+
+        </CardContent>
       </Card>
 
       {/* ── CSV FORMÁTUM ÚTMUTATÓ ── */}

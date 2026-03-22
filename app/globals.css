@@ -85,6 +85,74 @@
   }
 }
 
+/* =====================================================
+   Landing Page - Prémium animációk
+   ===================================================== */
+
+/* Gradient szöveg animáció (hero főcím) */
+@keyframes gradient-shift {
+  0%   { background-position: 0% 50%; }
+  50%  { background-position: 100% 50%; }
+  100% { background-position: 0% 50%; }
+}
+
+.animate-gradient-text {
+  background: linear-gradient(135deg, #22D3EE, #818CF8, #22D3EE);
+  background-size: 200% 200%;
+  animation: gradient-shift 5s ease infinite;
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+/* Lebegő kártya (chat mockup) */
+@keyframes float {
+  0%, 100% { transform: translateY(0px);   }
+  50%       { transform: translateY(-12px); }
+}
+
+.animate-float {
+  animation: float 4s ease-in-out infinite;
+}
+
+/* Halvány felfelé csúszás betöltéskor */
+@keyframes fade-up {
+  from { opacity: 0; transform: translateY(24px); }
+  to   { opacity: 1; transform: translateY(0);    }
+}
+
+.animate-fade-up {
+  animation: fade-up 0.6s ease-out forwards;
+}
+
+.animate-fade-up-delay-1 { animation: fade-up 0.6s ease-out 0.1s forwards; opacity: 0; }
+.animate-fade-up-delay-2 { animation: fade-up 0.6s ease-out 0.2s forwards; opacity: 0; }
+.animate-fade-up-delay-3 { animation: fade-up 0.6s ease-out 0.3s forwards; opacity: 0; }
+
+/* Dot grid háttér a hero-hoz */
+.hero-grid-bg {
+  background-image:
+    radial-gradient(circle at 1px 1px, rgba(99, 102, 241, 0.15) 1px, transparent 0);
+  background-size: 40px 40px;
+}
+
+/* Glassmorphism kártya */
+.glass-card {
+  background: rgba(20, 23, 41, 0.6);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid rgba(45, 52, 84, 0.8);
+}
+
+/* Glow gomb effekt */
+.btn-glow {
+  box-shadow: 0 0 20px rgba(8, 145, 178, 0.4), 0 0 40px rgba(8, 145, 178, 0.15);
+  transition: box-shadow 0.3s ease;
+}
+.btn-glow:hover {
+  box-shadow: 0 0 30px rgba(8, 145, 178, 0.6), 0 0 60px rgba(8, 145, 178, 0.25);
+}
+
 /* Custom scrollbar styles */
 ::-webkit-scrollbar {
   width: 10px;

@@ -4,9 +4,17 @@ import * as React from 'react'
 import Link from 'next/link'
 import { useParams, usePathname } from 'next/navigation'
 import { cn } from '@/lib/utils'
-import { Settings as SettingsIcon, Users, FileText, Key } from 'lucide-react'
+import { Settings as SettingsIcon, Users, FileText, Key, CreditCard } from 'lucide-react'
+import { LucideIcon } from 'lucide-react'
 
-const settingsTabs = [
+interface SettingsTab {
+  name: string
+  href: string
+  icon: LucideIcon
+  badge?: string
+}
+
+const settingsTabs: SettingsTab[] = [
   {
     name: 'General',
     href: '/settings/general',
@@ -26,7 +34,11 @@ const settingsTabs = [
     name: 'Training',
     href: '/settings/training',
     icon: FileText,
-    badge: 'Phase 4',
+  },
+  {
+    name: 'Billing',
+    href: '/settings/billing',
+    icon: CreditCard,
   },
 ]
 

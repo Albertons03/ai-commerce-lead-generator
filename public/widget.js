@@ -654,14 +654,16 @@
   }
 
   /**
-   * Üzenet küldése az AI chatbot-nak.
-   * A /api/chat endpoint teljes RAG pipeline-t futtat:
-   * 1. Intent analízis
-   * 2. Vektoros termék keresés
-   * 3. AI válasz generálás
-   * 4. Lead capture detekció
+   * Streaming üzenetküldés az AI chatbot-nak.
+   *
+   * SSE (Server-Sent Events) formátumú választ olvas ReadableStream reader-rel.
+   * A szöveg chunk-okban érkezik → progresszív megjelenítés (gépelős effekt).
+   *
+   * @param {string} message - A user által beírt szöveg
+   * @param {function} onChunk - Minden szövegtöredéknél hívódik: onChunk(chunkText)
+   * @param {function} onDone  - Stream végén hívódik: onDone(eventData)
    */
-  async function sendMessageToApi(message) {
+  async function sendStreamingMessage(message, onChunk, onDone) {
     var res = await fetch(config.baseUrl + "/api/chat", {
       method:  "POST",
       headers: { "Content-Type": "application/json" },
@@ -669,6 +671,8 @@
         message:              message,
         conversation_id:      state.conversationId,
         organization_id:      config.orgId,
+        api_key:              config.apiKey,  // API key validáláshoz
+        stream:               true,   // SSE módot kér a backend-től
         include_products:     true,
         max_products:         5,
         similarity_threshold: 0.7,
@@ -676,7 +680,47 @@
     });
 
     if (!res.ok) throw new Error("Chat API failed: " + res.status);
-    return res.json();
+
+    // ReadableStream reader: chunk-okat olvas a HTTP response body-ból
+    // Ez a modern fetch streaming API - nem kell EventSource mert POST kérés
+    var reader  = res.body.getReader();
+    var decoder = new TextDecoder();
+    var buffer  = "";
+
+    while (true) {
+      var result = await reader.read();
+      if (result.done) break;
+
+      // Uint8Array → string, stream:true = folytatható dekódolás (multi-byte karakterek)
+      buffer += decoder.decode(result.value, { stream: true });
+
+      // SSE formátum: "data: <JSON>\n\n" soronként, több chunk is jöhet egyszerre
+      var lines = buffer.split("\n");
+      // Az utolsó sor lehet csonka → visszatartjuk a következő körre
+      buffer = lines.pop();
+
+      for (var i = 0; i < lines.length; i++) {
+        var line = lines[i].trim();
+        if (!line.startsWith("data: ")) continue;
+
+        var jsonStr = line.slice(6); // "data: " levágása
+        if (!jsonStr) continue;
+
+        try {
+          var event = JSON.parse(jsonStr);
+          if (event.type === "chunk" && event.content) {
+            onChunk(event.content);
+          } else if (event.type === "done") {
+            onDone(event);
+          } else if (event.type === "error") {
+            throw new Error(event.message || "Stream error");
+          }
+        } catch (parseErr) {
+          // Nem valid JSON sor - kihagyjuk (pl. keep-alive komment)
+          console.warn("[LeadWidget] SSE parse error:", parseErr);
+        }
+      }
+    }
   }
 
   // =====================================================
@@ -727,27 +771,64 @@
     updateSendBtn();
     setTyping(true);
 
+    // Az élő streaming bot üzenet DOM eleme (progresszívan töltjük)
+    var botMsgEl    = null;
+    var botBubbleEl = null;
+    var accumulated = ""; // eddig kapott szöveg összesen
+
     try {
-      var data = await sendMessageToApi(text);
-      setTyping(false);
+      await sendStreamingMessage(
+        text,
 
-      if (data.success) {
-        addMessage("bot", data.data.assistant_message);
+        // onChunk: minden szövegtöredéknél hívódik
+        function onChunk(chunk) {
+          // Első chunk érkezésekor: typing indicator el, üres buborék létrehozása
+          if (!botMsgEl) {
+            setTyping(false);
 
-        // Ha az AI lead adatot detektált a beszélgetésből,
-        // a /api/chat endpoint automatikusan menti a leads táblába.
-        // Nincs szükség külön API hívásra a widget részéről.
-        if (data.data.lead_capture) {
-          console.log("[LeadWidget] Lead captured:", data.data.lead_capture.lead_id);
+            botMsgEl    = document.createElement("div");
+            botMsgEl.className = "msg bot";
+            botBubbleEl = document.createElement("div");
+            botBubbleEl.className = "bubble";
+            botMsgEl.appendChild(botBubbleEl);
+            elMessages.appendChild(botMsgEl);
+            // state.messages-be placeholder (onDone majd felülírja)
+            state.messages.push({ role: "bot", content: "" });
+          }
+
+          accumulated += chunk;
+          // textContent = XSS-biztos (nem innerHTML), folyamatosan frissül
+          botBubbleEl.textContent = accumulated;
+          scrollToBottom();
+        },
+
+        // onDone: stream vége, teljes szöveg + metadata megvan
+        function onDone(event) {
+          var finalText = event.assistant_message || accumulated;
+
+          // Frissítjük a DOM-ot a végleges szöveggel (esetleg különbözhet)
+          if (botBubbleEl) {
+            botBubbleEl.textContent = finalText;
+          }
+
+          // state.messages utolsó bejegyzése a kész szöveg
+          if (state.messages.length > 0) {
+            state.messages[state.messages.length - 1].content = finalText;
+          }
+
+          if (event.lead_capture) {
+            console.log("[LeadWidget] Lead captured:", event.lead_capture.lead_id);
+          }
         }
-      } else {
-        addMessage("bot", "Sorry, something went wrong. Please try again.");
-      }
+      );
 
     } catch (e) {
       setTyping(false);
       console.error("[LeadWidget] Send error:", e);
-      addMessage("bot", "Connection error. Please check your internet and try again.");
+      // Ha a streaming közben szakadt meg, és van részleges szöveg - megtartjuk
+      if (!botMsgEl) {
+        addMessage("bot", "Connection error. Please check your internet and try again.");
+      }
     } finally {
       state.isLoading = false;
       updateSendBtn();

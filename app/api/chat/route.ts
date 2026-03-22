@@ -29,6 +29,10 @@ import {
   captureLeadFromConversation,
   LeadCaptureContext,
 } from "@/lib/ai/lead-capture-service";
+import { trackChatUsage, trackLeadUsage } from "@/lib/billing/usage-service";
+import { checkRateLimit } from "@/lib/utils/rate-limiter";
+import { validateApiKey } from "@/lib/utils/validate-api-key";
+import { sanitizeUserMessage, detectSuspiciousContent } from "@/lib/utils/sanitize";
 
 // =====================================================
 // Request Validation
@@ -38,6 +42,9 @@ const chatRequestSchema = z.object({
   message: z.string().min(1).max(2000, "Message too long"),
   conversation_id: z.string().uuid("Invalid conversation_id"),
   organization_id: z.string().uuid("Invalid organization_id"),
+
+  // API key - widget küldi, szerver validálja
+  api_key: z.string().optional(),
 
   // Optional parameters
   stream: z.boolean().default(false),
@@ -69,6 +76,40 @@ export async function POST(request: NextRequest) {
   const startTime = Date.now();
 
   try {
+    // =====================================================
+    // 1. Rate Limiting - IP alapú, 20 kérés/perc
+    // =====================================================
+    // x-forwarded-for: Vercel/proxy mögött az eredeti IP
+    const ip = request.headers.get("x-forwarded-for")?.split(",")[0]?.trim()
+      || request.headers.get("x-real-ip")
+      || "unknown";
+
+    const rateLimit = await checkRateLimit({
+      identifier: `chat:${ip}`,
+      maxRequests: 20,
+      windowMs: 60_000,
+    });
+
+    if (!rateLimit.allowed) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: {
+            code: "rate_limit_exceeded",
+            message: "Too many requests. Please wait a moment and try again.",
+          },
+        },
+        {
+          status: 429,
+          headers: {
+            "Retry-After": String(rateLimit.retryAfter),
+            "X-RateLimit-Limit": String(rateLimit.limit),
+            "X-RateLimit-Remaining": "0",
+          },
+        }
+      );
+    }
+
     console.log("[Chat API] Processing chat request...");
 
     // Parse and validate request
@@ -91,16 +132,59 @@ export async function POST(request: NextRequest) {
 
     const chatRequest: ChatRequest = validation.data;
 
+    // =====================================================
+    // 2. API Key Validáció
+    // =====================================================
+    // Ha az api_key meg van adva (widget küldi), validáljuk.
+    // Ha nincs (dashboard teszt UI), engedélyezzük - dashboard auth védi.
+    if (chatRequest.api_key) {
+      const keyResult = await validateApiKey(chatRequest.api_key);
+      if (!keyResult.valid) {
+        return NextResponse.json(
+          {
+            success: false,
+            error: { code: "invalid_api_key", message: "Invalid or revoked API key" },
+          },
+          { status: 401 }
+        );
+      }
+      // Az API key-ből kinyert org ID-nek egyeznie kell a kérésben lévővel
+      if (keyResult.organization_id !== chatRequest.organization_id) {
+        return NextResponse.json(
+          {
+            success: false,
+            error: { code: "unauthorized", message: "API key does not match organization" },
+          },
+          { status: 403 }
+        );
+      }
+    }
+
+    // =====================================================
+    // 3. Input Sanitizálás
+    // =====================================================
+    // HTML/script tag-ek szűrése, prompt injection detektálás
+    const sanitizedMessage = sanitizeUserMessage(chatRequest.message);
+
+    if (detectSuspiciousContent(chatRequest.message)) {
+      console.warn("[Chat API] Suspicious content detected:", {
+        organization_id: chatRequest.organization_id,
+        ip,
+        message_preview: chatRequest.message.slice(0, 100),
+      });
+      // Nem blokkoljuk, csak logoljuk - a szűrt verzióval folytatunk
+    }
+
+    // Lecseréljük az eredeti üzenetet a sanitizált verzióra
+    chatRequest.message = sanitizedMessage;
+
     console.log("[Chat API] Request validated:", {
       message_length: chatRequest.message.length,
       conversation_id: chatRequest.conversation_id,
       organization_id: chatRequest.organization_id,
       stream: chatRequest.stream,
-      include_products: chatRequest.include_products,
     });
 
-    // For now, we'll skip the organization access check since this is a public chat API
-    // In production, you might want to verify API keys or other authentication
     console.log(
       "[Chat API] Processing for organization:",
       chatRequest.organization_id
@@ -135,7 +219,13 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Process the chat request
+    // Streaming ág: ha a kliens stream:true-t küld, SSE választ adunk vissza
+    if (chatRequest.stream) {
+      console.log("[Chat API] Streaming mode activated");
+      return handleStreamingRequest(chatRequest, conversation);
+    }
+
+    // Non-streaming ág: teljes JSON választ várunk meg
     const response = await processChatMessage(chatRequest, conversation);
 
     const totalTime = Date.now() - startTime;
@@ -159,18 +249,277 @@ export async function POST(request: NextRequest) {
       processing_time_ms: totalTime,
     });
 
+    // =====================================================
+    // Graceful Fallback - OpenAI specifikus hibák
+    // =====================================================
+    // Felhasználóbarát üzenetek az OpenAI hibatípusokhoz
+
+    // Quota (számlázási) hiba
+    if (error.code === "insufficient_quota" || error.status === 429) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: {
+            code: "service_unavailable",
+            message: "Our chat service is temporarily unavailable. Please try again in a few minutes.",
+          },
+        },
+        { status: 503 }
+      );
+    }
+
+    // OpenAI szerver hiba
+    if (error.status >= 500 || error.type === "server_error") {
+      return NextResponse.json(
+        {
+          success: false,
+          error: {
+            code: "ai_unavailable",
+            message: "The AI assistant is temporarily unavailable. Please try again shortly.",
+          },
+        },
+        { status: 503 }
+      );
+    }
+
     return NextResponse.json(
       {
         success: false,
         error: {
           code: "internal_server_error",
-          message: "Failed to process chat request",
-          details: error.message,
+          message: "Something went wrong. Please try again.",
         },
       },
       { status: 500 }
     );
   }
+}
+
+// =====================================================
+// Streaming Chat Handler
+// =====================================================
+
+/**
+ * SSE (Server-Sent Events) formátumú streaming választ ad vissza.
+ * A kliens olvashatja ReadableStream reader segítségével.
+ *
+ * Eseménytípusok:
+ *   { type: "chunk", content: "..." }        - szöveges töredék érkezik
+ *   { type: "done", assistant_message, ... } - teljes válasz kész + metadata
+ *   { type: "error", message: "..." }        - hiba
+ */
+async function handleStreamingRequest(
+  request: ChatRequest,
+  conversation: any
+): Promise<Response> {
+  const {
+    message,
+    conversation_id,
+    organization_id,
+    include_products,
+    max_products,
+    similarity_threshold,
+    category_filter,
+    price_range,
+    temperature,
+    max_tokens,
+  } = request;
+
+  // RAG pipeline előkészítés (stream előtt, hogy gyors legyen az első chunk)
+  const { intentAnalysis, productMatches, conversationContext, promptComponents } =
+    await buildRAGContext(request, conversation);
+
+  // User üzenetet azonnal mentjük DB-be (stream előtt)
+  const userMessage = await createMessage(
+    conversation_id,
+    organization_id,
+    "user",
+    message,
+    {
+      metadata: {
+        intent: intentAnalysis.intent,
+        sentiment: intentAnalysis.sentiment,
+        confidence: intentAnalysis.confidence,
+        lead_signals: intentAnalysis.lead_signals,
+      },
+    }
+  );
+
+  // ReadableStream: ez az amit a böngésző/widget olvas chunk-okban
+  const stream = new ReadableStream({
+    async start(controller) {
+      // TextEncoder: string → Uint8Array (amit a stream küld)
+      const encoder = new TextEncoder();
+
+      // SSE formátum: "data: <JSON>\n\n" - szabvány Server-Sent Events protokoll
+      function sendEvent(data: object) {
+        const line = `data: ${JSON.stringify(data)}\n\n`;
+        controller.enqueue(encoder.encode(line));
+      }
+
+      let fullContent = "";
+
+      try {
+        // generateChatResponseStream AsyncGenerator - minden chunk-ra yield-el
+        for await (const chunk of generateChatResponseStream({
+          prompt_components: promptComponents,
+          temperature,
+          max_tokens,
+          organization_id,
+        })) {
+          if (chunk.content) {
+            fullContent += chunk.content;
+            sendEvent({ type: "chunk", content: chunk.content });
+          }
+
+          // Az utolsó chunk (finish_reason van rajta): DB mentés + lead capture
+          if (chunk.is_complete) {
+            // Asszisztens üzenet mentése
+            const assistantMsg = await createMessage(
+              conversation_id,
+              organization_id,
+              "assistant",
+              fullContent,
+              {
+                metadata: {
+                  model_used: "gpt-4-turbo-preview",
+                  products_referenced: productMatches.map((p) => p.product_id),
+                },
+              }
+            );
+
+            // Usage tracking: streaming-nél nem tudjuk a pontos token számot,
+            // ezért a prompt token becslést használjuk (promptComponents.token_count_estimate)
+            trackChatUsage(organization_id, promptComponents.token_count_estimate).catch(() => {});
+
+            // Lead capture kísérlet (captureLeadFromConversation már importálva van)
+            let leadCaptureResult: { lead_id: string; score: number; triggers: string[] } | null = null;
+            try {
+              const leadContext: LeadCaptureContext = {
+                conversation_id,
+                organization_id,
+                latest_message: message,
+                conversation_history: [
+                  ...conversationContext.previous_messages.map((msg) => ({
+                    role: msg.role,
+                    content: msg.content,
+                    sequence_number: 0,
+                  })),
+                  { role: "user", content: message, sequence_number: conversationContext.previous_messages.length + 1 },
+                ],
+                product_interests: productMatches.map((p) => p.product_name),
+              };
+              const capturedLead = await captureLeadFromConversation(leadContext);
+              if (capturedLead) {
+                leadCaptureResult = {
+                  lead_id: capturedLead.lead_id,
+                  score: capturedLead.score,
+                  triggers: [capturedLead.trigger.type],
+                };
+
+                // Lead usage tracking (fire-and-forget)
+                trackLeadUsage(organization_id).catch(() => {});
+              }
+            } catch (e) {
+              console.error("[Chat API] Lead capture failed in stream:", e);
+            }
+
+            // Befejező esemény: teljes szöveg + metadata a kliensnek
+            sendEvent({
+              type: "done",
+              conversation_id,
+              user_message_id: userMessage.id,
+              assistant_message_id: assistantMsg.id,
+              assistant_message: fullContent,
+              products_found: productMatches,
+              intent_analysis: intentAnalysis,
+              lead_capture: leadCaptureResult,
+            });
+
+            break;
+          }
+        }
+      } catch (error: any) {
+        console.error("[Chat API] Stream error:", error);
+        sendEvent({ type: "error", message: "Stream generation failed" });
+      } finally {
+        controller.close();
+      }
+    },
+  });
+
+  return new Response(stream, {
+    headers: {
+      "Content-Type": "text/event-stream",
+      "Cache-Control": "no-cache, no-transform",
+      "Connection": "keep-alive",
+      // CORS: widget külső domainről is hívhatja
+      "Access-Control-Allow-Origin": "*",
+      "X-Accel-Buffering": "no", // Nginx proxy buffering kikapcsolása (streaming!)
+    },
+  });
+}
+
+// =====================================================
+// RAG Pipeline Setup (streaming + non-streaming közös)
+// =====================================================
+
+/**
+ * Futtatja a RAG pipeline 1-4. lépését (intent, vector search, history, prompt).
+ * Mindkét útvonal (streaming / non-streaming) ezt hívja.
+ */
+async function buildRAGContext(request: ChatRequest, conversation: any) {
+  const {
+    message,
+    conversation_id,
+    organization_id,
+    include_products,
+    max_products,
+    similarity_threshold,
+    category_filter,
+    price_range,
+  } = request;
+
+  // Step 1: Intent analízis
+  const intentAnalysis = await analyzeMessageIntent(message, organization_id);
+
+  // Step 2: Termék vektor keresés
+  let productMatches: ProductMatch[] = [];
+  if (include_products) {
+    try {
+      const searchResult = await performVectorSearch({
+        organization_id,
+        query: message,
+        top_k: max_products,
+        similarity_threshold,
+        category_filter,
+        price_range,
+      });
+      productMatches = searchResult.matches;
+    } catch (error) {
+      console.error("[Chat API] Vector search failed, continuing:", error);
+    }
+  }
+
+  // Step 3: Korábbi üzenetek lekérése
+  const previousMessages = await getConversationMessages(conversation_id);
+  const conversationContext: ConversationContext = {
+    conversation_id,
+    organization_id,
+    visitor_metadata: conversation.visitor_metadata,
+    previous_messages: previousMessages,
+  };
+
+  // Step 4: Prompt összerakása
+  const promptComponents = await buildRAGPrompt({
+    query: message,
+    conversation_context: conversationContext,
+    product_matches: productMatches,
+    organization_name: undefined,
+    custom_instructions: undefined,
+  });
+
+  return { intentAnalysis, productMatches, conversationContext, promptComponents };
 }
 
 // =====================================================
@@ -205,97 +554,22 @@ interface ChatProcessingResult {
 }
 
 /**
- * Processes a chat message with full RAG pipeline
+ * Processes a chat message with full RAG pipeline (non-streaming)
  */
 async function processChatMessage(
   request: ChatRequest,
   conversation: any
 ): Promise<ChatProcessingResult> {
-  const {
-    message,
-    conversation_id,
-    organization_id,
-    include_products,
-    max_products,
-    similarity_threshold,
-    category_filter,
-    price_range,
-    temperature,
-    max_tokens,
-  } = request;
+  const { message, conversation_id, organization_id, temperature, max_tokens } = request;
 
   console.log("[Chat Processing] Starting RAG pipeline...");
 
-  // Step 1: Analyze user intent
-  const intentStartTime = Date.now();
-  const intentAnalysis = await analyzeMessageIntent(message, organization_id);
-  const intentTime = Date.now() - intentStartTime;
-
-  console.log("[Chat Processing] Intent analyzed:", {
-    intent: intentAnalysis.intent,
-    sentiment: intentAnalysis.sentiment,
-    confidence: intentAnalysis.confidence,
-    analysis_time_ms: intentTime,
-  });
-
-  // Step 2: Vector search for relevant products (if enabled)
-  let productMatches: ProductMatch[] = [];
-  let vectorSearchTime = 0;
-
-  if (include_products) {
-    const searchStartTime = Date.now();
-
-    try {
-      const searchResult = await performVectorSearch({
-        organization_id,
-        query: message,
-        top_k: max_products,
-        similarity_threshold,
-        category_filter,
-        price_range,
-      });
-
-      productMatches = searchResult.matches;
-      vectorSearchTime = Date.now() - searchStartTime;
-
-      console.log("[Chat Processing] Vector search completed:", {
-        products_found: productMatches.length,
-        search_time_ms: vectorSearchTime,
-        avg_similarity:
-          productMatches.length > 0
-            ? (
-                productMatches.reduce((sum, p) => sum + p.similarity_score, 0) /
-                productMatches.length
-              ).toFixed(3)
-            : 0,
-      });
-    } catch (error) {
-      console.error(
-        "[Chat Processing] Vector search failed, continuing without products:",
-        error
-      );
-      vectorSearchTime = Date.now() - searchStartTime;
-    }
-  }
-
-  // Step 3: Get conversation history
-  const conversationContext: ConversationContext = {
-    conversation_id,
-    organization_id,
-    visitor_metadata: conversation.visitor_metadata,
-    previous_messages: await getConversationMessages(conversation_id),
-  };
-
-  // Step 4: Build prompt with context
-  const promptStartTime = Date.now();
-  const promptComponents = await buildRAGPrompt({
-    query: message,
-    conversation_context: conversationContext,
-    product_matches: productMatches,
-    organization_name: undefined, // TODO: Get from organization table
-    custom_instructions: undefined, // TODO: Get from organization settings
-  });
-  const promptTime = Date.now() - promptStartTime;
+  // Steps 1-4: közös RAG kontextus felépítés
+  const ragStart = Date.now();
+  const { intentAnalysis, productMatches, conversationContext, promptComponents } =
+    await buildRAGContext(request, conversation);
+  const vectorSearchTime = Date.now() - ragStart; // közelítő érték
+  const promptTime = 0; // buildRAGContext-be van beépítve
 
   console.log("[Chat Processing] Prompt built:", {
     prompt_building_time_ms: promptTime,
@@ -352,6 +626,9 @@ async function processChatMessage(
     }
   );
 
+  // Usage tracking: chat + tokenek rögzítése (fire-and-forget, nem blokkoló)
+  trackChatUsage(organization_id, aiResponse.tokens_used.total).catch(() => {});
+
   // Step 7: Check for lead capture (async, non-blocking)
   let leadCaptureResult: { lead_id: string; score: number; triggers: string[] } | undefined = undefined;
   let leadCaptureTime = 0;
@@ -396,6 +673,9 @@ async function processChatMessage(
         score: capturedLead.score,
         capture_time_ms: leadCaptureTime,
       });
+
+      // Lead usage tracking (fire-and-forget)
+      trackLeadUsage(organization_id).catch(() => {});
     }
   } catch (error) {
     console.error("[Chat Processing] Lead capture failed:", error);

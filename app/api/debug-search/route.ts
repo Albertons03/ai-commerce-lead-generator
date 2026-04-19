@@ -14,6 +14,7 @@ export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
   const orgId = searchParams.get("org");
   const query = searchParams.get("q") || "gaming laptop";
+  const threshold = parseFloat(searchParams.get("threshold") || "0.0");
 
   if (!orgId) {
     return NextResponse.json({ error: "?org=<uuid> required" }, { status: 400 });
@@ -38,7 +39,7 @@ export async function GET(request: NextRequest) {
         p_organization_id: orgId,
         p_query_embedding: `[${embedding.join(",")}]`,
         p_limit: 10,
-        p_similarity_threshold: 0.0,
+        p_similarity_threshold: threshold,
       }
     );
 
@@ -61,15 +62,18 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({
       query,
       org_id: orgId,
+      threshold_used: threshold,
       embedding_length: embedding.length,
       embedding_ms: embeddingMs,
       total_products_in_db: count,
-      results_at_threshold_0: (allResults || []).map((r: any) => ({
+      results: (allResults || []).map((r: any) => ({
         name: r.product_name,
         similarity: r.similarity_score?.toFixed(4),
         category: r.product_category,
         description_preview: r.product_description?.slice(0, 60),
       })),
+      widget_threshold: 0.1,
+      dashboard_threshold: 0.2,
     });
   } catch (err: any) {
     return NextResponse.json({

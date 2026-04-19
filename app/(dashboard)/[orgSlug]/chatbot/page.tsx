@@ -147,7 +147,7 @@ export default function ChatbotPage() {
           stream: true, // SSE streaming kérése
           include_products: true,
           max_products: 5,
-          similarity_threshold: 0.7,
+          similarity_threshold: 0.2,
         }),
       });
 

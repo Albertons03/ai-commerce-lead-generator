@@ -675,7 +675,7 @@
         stream:               true,   // SSE módot kér a backend-től
         include_products:     true,
         max_products:         5,
-        similarity_threshold: 0.7,
+        similarity_threshold: 0.1,  // 0.1 = alacsony küszöb, debug módban
       }),
     });
 

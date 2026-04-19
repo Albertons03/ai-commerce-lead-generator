@@ -90,10 +90,11 @@ export function prepareTextForEmbedding(product: ProductInput): string {
  */
 function preprocessText(text: string): string {
   // Basic text cleaning and normalization
+  // NOTE: We do NOT strip non-ASCII chars because queries may be in Hungarian
+  // (é, á, ő, ü, etc.) and stripping them would break the embedding similarity.
   return text
     .trim()
     .replace(/\s+/g, " ") // Multiple spaces to single space
-    .replace(/[^\w\s\-$.,]/g, "") // Keep only word chars, spaces, hyphens, dollar, comma, period
     .toLowerCase();
 }
 

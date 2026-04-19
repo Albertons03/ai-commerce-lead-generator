@@ -10,8 +10,7 @@
  * =====================================================
  */
 
-import { createServerClient } from "@supabase/ssr";
-import { cookies } from "next/headers";
+import { createClient } from "@supabase/supabase-js";
 import { generateEmbedding } from "./embedding-service";
 
 // =====================================================
@@ -190,56 +189,32 @@ async function searchSimilarProducts(
     price_range,
   } = options;
 
-  const cookieStore = cookies();
-  const supabase = createServerClient(
+  // Admin (service role) kliens - RLS bypass, nem kell cookie
+  // A widget anon kéréseit is ki tudja szolgálni ezzel
+  const supabase = createClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.SUPABASE_SERVICE_ROLE_KEY!,
+    { auth: { persistSession: false } }
+  );
+
+  // RPC hívás - a vektor a request BODY-ban megy, nem URL-ben
+  // Ezért nem ütközik URL hossz limitbe (1536 float ~= 10KB URL lett volna)
+  const { data: results, error } = await supabase.rpc(
+    "search_products_by_embedding",
     {
-      cookies: {
-        get(name: string) {
-          return cookieStore.get(name)?.value;
-        },
-      },
+      p_organization_id: organization_id,
+      p_query_embedding: `[${query_embedding.join(",")}]`,
+      p_limit: top_k,
+      p_similarity_threshold: similarity_threshold,
     }
   );
 
-  // Build the query
-  let query = supabase
-    .from("product_embeddings")
-    .select(
-      `
-      product_id,
-      product_name,
-      product_description,
-      product_price,
-      product_category,
-      product_url,
-      metadata,
-      embedding <=> '[${query_embedding.join(",")}]' as similarity_score
-    `
-    )
-    .eq("organization_id", organization_id)
-    .gte(
-      `embedding <=> '[${query_embedding.join(",")}]'`,
-      1 - similarity_threshold
-    ) // pgvector similarity
-    .order("similarity_score", { ascending: true }) // Lower distance = higher similarity
-    .limit(top_k);
-
-  // Apply optional filters
-  if (category_filter) {
-    query = query.eq("product_category", category_filter);
-  }
-
-  if (price_range?.min !== undefined) {
-    query = query.gte("product_price", price_range.min);
-  }
-
-  if (price_range?.max !== undefined) {
-    query = query.lte("product_price", price_range.max);
-  }
-
-  const { data: results, error } = await query;
+  console.log("[RAG Service] RPC result:", {
+    error: error ? { message: error.message, code: error.code } : null,
+    results_count: results?.length ?? 0,
+    threshold_used: similarity_threshold,
+    org_id: organization_id,
+  });
 
   if (error) {
     console.error("[RAG Service] Database search error:", {
@@ -248,17 +223,33 @@ async function searchSimilarProducts(
       details: error.details,
       hint: error.hint,
     });
-    // Return empty results instead of throwing error to allow chat to continue
     console.log("[RAG Service] Continuing without vector search results");
     return [];
   }
 
   if (!results || results.length === 0) {
-    console.log("[RAG Service] No similar products found");
+    // Debug: run the same query with threshold 0 to see actual similarity scores
+    const { data: debugResults } = await supabase.rpc(
+      "search_products_by_embedding",
+      {
+        p_organization_id: organization_id,
+        p_query_embedding: `[${query_embedding.join(",")}]`,
+        p_limit: 5,
+        p_similarity_threshold: 0.0,  // no filter → shows real scores
+      }
+    );
+    console.log("[RAG Service] DEBUG - Top similarities at threshold 0.0:", {
+      threshold_used: similarity_threshold,
+      top_results: (debugResults || []).slice(0, 5).map((r: any) => ({
+        name: r.product_name,
+        similarity: r.similarity_score,
+      })),
+    });
     return [];
   }
 
   // Transform results to ProductMatch interface
+  // Az RPC már (1 - distance) értéket ad vissza → valódi similarity score (0-1)
   const matches: ProductMatch[] = results.map((row: any) => ({
     product_id: row.product_id,
     product_name: row.product_name,
@@ -266,7 +257,7 @@ async function searchSimilarProducts(
     product_price: row.product_price,
     product_category: row.product_category,
     product_url: row.product_url,
-    similarity_score: 1 - row.similarity_score, // Convert distance to similarity (0-1)
+    similarity_score: row.similarity_score,
     metadata: row.metadata,
   }));
 

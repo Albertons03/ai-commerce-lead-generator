@@ -52,9 +52,9 @@ export interface RAGSearchResult {
 
 const RAG_CONFIG = {
   DEFAULT_TOP_K: 5,
-  DEFAULT_SIMILARITY_THRESHOLD: 0.75,
+  DEFAULT_SIMILARITY_THRESHOLD: 0.3,
   MAX_TOP_K: 20,
-  MIN_SIMILARITY_THRESHOLD: 0.5,
+  MIN_SIMILARITY_THRESHOLD: 0.0,  // 0.0 = a route.ts schema határozza meg a minimumot
 } as const;
 
 // =====================================================

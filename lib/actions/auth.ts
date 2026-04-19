@@ -87,7 +87,7 @@ export async function signIn(data: LoginInput): Promise<ActionResponse> {
       } as any);
 
       if (insertError) {
-        console.error("Error creating user profile:", insertError);
+        console.error("Error creating user profile:", String(insertError));
       }
     }
 
@@ -97,7 +97,7 @@ export async function signIn(data: LoginInput): Promise<ActionResponse> {
       success: true,
     };
   } catch (error: any) {
-    console.error("Sign in action error:", error);
+    console.error("Sign in action error:", String(error));
 
     if (error.name === "ZodError") {
       return {
@@ -139,7 +139,7 @@ export async function signUp(data: SignupInput): Promise<ActionResponse> {
     });
 
     if (authError) {
-      console.error("Sign up error:", authError);
+      console.error("Sign up error:", authError.message);
 
       // Map Supabase errors to user-friendly messages
       if (authError.message.includes("already registered")) {
@@ -163,18 +163,10 @@ export async function signUp(data: SignupInput): Promise<ActionResponse> {
       };
     }
 
-    // Create user profile in users table
-    const { error: profileError } = await supabase.from("users").insert({
-      id: authData.user.id,
-      email: authData.user.email!,
-      full_name: validatedData.name,
-      avatar_url: null,
-    } as any);
-
-    if (profileError) {
-      console.error("Error creating user profile:", profileError);
-      // Note: User is still created in auth.users, they can still sign in
-    }
+    // Note: public.users profile is created automatically by the
+    // `handle_new_user` DB trigger (on_auth_user_created) whenever
+    // a row is inserted into auth.users. No manual insert needed here —
+    // doing it again would cause a duplicate key violation.
 
     revalidatePath("/", "layout");
 
@@ -182,7 +174,7 @@ export async function signUp(data: SignupInput): Promise<ActionResponse> {
       success: true,
     };
   } catch (error: any) {
-    console.error("Sign up action error:", error);
+    console.error("Sign up action error:", String(error));
 
     if (error.name === "ZodError") {
       return {

@@ -204,25 +204,28 @@ function buildSystemPrompt(
     ? `\n\n## Custom Instructions\n\n${customInstructions}`
     : "";
 
-  const contextInstructions = `\n\n## Important Guidelines
+  const contextInstructions = `\n\n## CRITICAL RULES — MUST FOLLOW
 
-**Product Information:**
-- Only reference products provided in the current context
-- If no relevant products are found, acknowledge this and ask clarifying questions
-- Never make up or hallucinate product details
-- Always mention product prices when available
+**🚫 ABSOLUTE PROHIBITION on hallucination:**
+- You may ONLY mention products that appear in the "## Available Products" section below
+- If "## Available Products" is empty or says "No specific products are available", you MUST tell the customer: "Unfortunately I don't have [product type] in my current catalog."
+- NEVER invent, guess, or recall products from your training data — not brand names, model numbers, specs, or prices
+- If a customer asks for something outside the catalog, say so honestly and ask what else you can help with
+
+**Product Information (when products ARE available):**
+- Reference ONLY the products listed in "## Available Products"
+- Use the exact prices and details shown — do not modify or estimate
 - Include product links when provided
 
 **Response Format:**
-- Start with a brief acknowledgment of the customer's question
-- Provide relevant product recommendations if available
-- Include specific details (price, features, category)
+- Acknowledge the customer's question briefly
+- If products found: list them with name, price, and key features
+- If no products found: say honestly that the catalog doesn't have it
 - End with a follow-up question or offer to help further
-- Keep responses under 200 words unless detailed comparison is requested
+- Keep responses under 200 words unless a detailed comparison is requested
 
 **Error Handling:**
-- If product context is empty, focus on understanding customer needs better
-- If technical issues occur, apologize and offer alternative assistance
+- If product context is empty: tell the customer the catalog doesn't have a match, and ask what else you can help with
 - Always maintain a helpful tone even when facing limitations`;
 
   return [basePrompt, organizationContext, customContext, contextInstructions]

@@ -58,7 +58,8 @@ export interface ChatServiceOptions {
 // =====================================================
 
 const CHAT_CONFIG = {
-  DEFAULT_MODEL: "gpt-4-turbo-preview",
+  // gpt-4o-mini: minden OpenAI fiókban elérhető, olcsóbb mint gpt-3.5-turbo, jobb minőség
+  DEFAULT_MODEL: "gpt-4o-mini",
   DEFAULT_TEMPERATURE: 0.7,
   DEFAULT_MAX_TOKENS: 1000,
   MAX_RETRIES: 3,
@@ -66,9 +67,11 @@ const CHAT_CONFIG = {
 
   // Cost estimates (USD per 1K tokens) - approximate
   COST_PER_1K_TOKENS: {
-    "gpt-4-turbo-preview": { prompt: 0.01, completion: 0.03 },
-    "gpt-4": { prompt: 0.03, completion: 0.06 },
-    "gpt-3.5-turbo": { prompt: 0.0015, completion: 0.002 },
+    "gpt-4o-mini":         { prompt: 0.00015, completion: 0.0006 },
+    "gpt-4o":              { prompt: 0.005,   completion: 0.015  },
+    "gpt-4-turbo-preview": { prompt: 0.01,    completion: 0.03   },
+    "gpt-4":               { prompt: 0.03,    completion: 0.06   },
+    "gpt-3.5-turbo":       { prompt: 0.0015,  completion: 0.002  },
   } as Record<string, { prompt: number; completion: number }>,
 } as const;
 

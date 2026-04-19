@@ -50,7 +50,7 @@ const chatRequestSchema = z.object({
   stream: z.boolean().default(false),
   include_products: z.boolean().default(true),
   max_products: z.number().min(1).max(20).default(5),
-  similarity_threshold: z.number().min(0.5).max(1.0).default(0.75),
+  similarity_threshold: z.number().min(0.1).max(1.0).default(0.5),
 
   // Optional filters
   category_filter: z.string().optional(),
@@ -382,7 +382,7 @@ async function handleStreamingRequest(
               fullContent,
               {
                 metadata: {
-                  model_used: "gpt-4-turbo-preview",
+                  model_used: "gpt-4o-mini",
                   products_referenced: productMatches.map((p) => p.product_id),
                 },
               }

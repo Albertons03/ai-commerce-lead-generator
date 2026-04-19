@@ -679,7 +679,11 @@
       }),
     });
 
-    if (!res.ok) throw new Error("Chat API failed: " + res.status);
+    if (!res.ok) {
+      var errBody = await res.text().catch(function() { return ""; });
+      console.error("[LeadWidget] Chat API error body:", errBody);
+      throw new Error("Chat API failed: " + res.status);
+    }
 
     // ReadableStream reader: chunk-okat olvas a HTTP response body-ból
     // Ez a modern fetch streaming API - nem kell EventSource mert POST kérés

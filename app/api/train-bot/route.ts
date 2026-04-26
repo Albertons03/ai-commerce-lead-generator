@@ -163,6 +163,7 @@ export async function POST(request: NextRequest) {
         {
           name: p.product_name,
           description: p.product_description,
+          price: p.price,
           metadata: p.metadata,
         },
       ])

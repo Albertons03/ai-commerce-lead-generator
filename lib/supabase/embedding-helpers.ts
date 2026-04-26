@@ -193,7 +193,7 @@ export async function upsertEmbedding(
 export async function batchUpsertEmbeddings(
   organizationId: string,
   embeddingResults: EmbeddingResult[],
-  productData: Map<string, { name: string; description: string; metadata?: Record<string, unknown> }>,
+  productData: Map<string, { name: string; description: string; price?: number; metadata?: Record<string, unknown> }>,
   model: string,
   overwriteExisting: boolean = false
 ): Promise<BatchUpsertResult> {
@@ -221,6 +221,7 @@ export async function batchUpsertEmbeddings(
         product_id: result.product_id,
         product_name: product.name,
         product_description: product.description,
+        product_price: product.price ?? null,
         embedding: JSON.stringify(result.embedding),
         embedding_model: model,
         metadata: product.metadata || {},
@@ -277,6 +278,7 @@ async function fallbackIndividualUpserts(
     product_id: string;
     product_name: string;
     product_description: string;
+    product_price: number | null;
     embedding: string;
     embedding_model: string;
     metadata: Record<string, unknown>;

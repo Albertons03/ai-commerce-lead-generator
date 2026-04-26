@@ -57,22 +57,31 @@ async function getOrgOwnerEmail(
 ): Promise<string | null> {
   const supabase = createAdminSupabaseClient();
 
-  // organization_members JOIN users: megkeressük az "owner" role-ú tagot
-  const { data, error } = await supabase
+  // 1. lépés: owner user_id lekérése (embedded select helyett, mert több FK van)
+  const { data: memberData, error: memberError } = await supabase
     .from("organization_members")
-    .select("user_id, users(email)")
+    .select("user_id")
     .eq("organization_id", organizationId)
     .eq("role", "owner")
     .limit(1)
-    .single() as { data: { user_id: string; users: { email: string } | null } | null; error: any };
+    .single() as { data: { user_id: string } | null; error: any };
 
-  if (error || !data) {
-    console.error("[Email] Could not find org owner:", error?.message);
+  if (memberError || !memberData) {
+    console.error("[Email] Could not find org owner:", memberError?.message);
     return null;
   }
 
-  // TypeScript: users lehet null (ha a JOIN nem talált semmit)
-  return data.users?.email ?? null;
+  // 2. lépés: email lekérése az auth.users-ből service role-lal
+  const { data: userData, error: userError } = await supabase.auth.admin.getUserById(
+    memberData.user_id
+  );
+
+  if (userError || !userData?.user?.email) {
+    console.error("[Email] Could not get user email:", userError?.message);
+    return null;
+  }
+
+  return userData.user.email;
 }
 
 // =====================================================

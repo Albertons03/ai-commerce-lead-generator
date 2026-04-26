@@ -313,7 +313,7 @@ export function formatProductsForContext(matches: ProductMatch[]): string {
       product.product_description
         ? `   Description: ${product.product_description}`
         : "",
-      product.product_price ? `   Price: $${product.product_price}` : "",
+      product.product_price ? `   Ár: ${Math.round(product.product_price).toLocaleString("hu-HU")} Ft` : "",
       product.product_category
         ? `   Category: ${product.product_category}`
         : "",

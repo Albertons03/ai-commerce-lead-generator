@@ -77,7 +77,7 @@ export function prepareTextForEmbedding(product: ProductInput): string {
   }
 
   if (product.price !== undefined && product.price !== null) {
-    parts.push(`Price: $${product.price.toFixed(2)}`);
+    parts.push(`Ár: ${Math.round(product.price)} Ft`);
   }
 
   // Join with period and space, trim whitespace

@@ -193,11 +193,11 @@ function parseCsv(csvText: string): ParseResult {
       continue;
     }
 
-    // Ár parseolása (opcionális) - "1,299.99" → 1299.99
+    // Ár parseolása (opcionális) - "799 999 Ft", "1,299.99", "$999" mind OK
     let price: number | undefined;
     if (row.price) {
-      // Eltávolítjuk a valuta szimbólumokat és ezres elválasztókat
-      const cleaned = row.price.replace(/[$€£,]/g, "");
+      // Valuta szimbólumok, "Ft", "HUF" suffix, és szóközök eltávolítása
+      const cleaned = row.price.replace(/[$€£,]|Ft|HUF/gi, "").replace(/\s/g, "");
       const parsed = parseFloat(cleaned);
       if (!isNaN(parsed) && parsed >= 0) {
         price = parsed;

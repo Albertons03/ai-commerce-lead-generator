@@ -221,3 +221,41 @@
 | Supabase Dashboard | https://supabase.com/dashboard/project/igmqatakacybybpvesrx |
 | Vercel Project | `ai-comerc-lead-generator` |
 | GitHub repo | https://github.com/Albertons03/ai-commerce-lead-generator |
+
+
+2026 03 22 
+
+● Minden éles és működik.
+
+  https://ai-comerc-lead-generator.vercel.app
+
+  ---
+  Teljes production checklist — minden zöld:
+
+  ┌─────┬───────────────────────────────────┬─────────┐
+  │     │              Funkció              │ Státusz │
+  ├─────┼───────────────────────────────────┼─────────┤
+  │ ✅  │ Chat + RAG + lead capture │ É      ││Él      │
+  ├─────┼───────────────────────────────────┼─────────┤
+  │ ✅  │ Dashboard + analitika     │ É      ││Él      │
+  ├─────┼───────────────────────────────────┼─────────┤
+  │ ✅  │ Shopify integráció        │ É      ││Él      │
+  ├─────┼───────────────────────────────────┼─────────┤
+  │ ✅  │ Usage tracking            │ É      ││Él      │
+  ├─────┼───────────────────────────────────┼─────────┤
+  │ ✅  │ Rate limiting + API key validáció │ Él      │
+  ├─────┼───────────────────────────────────┼─────────┤
+  │ ✅  │ Stripe billing (sandbox)          │ Él      │
+  ├─────┼───────────────────────────────────┼─────────┤
+  │ ✅  │ Stripe webhook                    │ Él      │                              t                                                               t  
+  ├─────┼───────────────────────────────────┼─────────┤
+  │ ✅  │ Landing page                      │ Él      │
+  └─────┴───────────────────────────────────┴─────────┘
+
+  ---
+  Holnap videózáshoz tesztelj végig egy folyamatot:
+  1. Landing page → Signup → Onboarding wizard
+  2. CSV upload → chatbot embed kód másolás
+  3. Billing oldal → Upgrade gomb (sandbox kártya: 4242 4242 4242 4242, bármilyen jövőbeli dátum, bármilyen CVC)
+
+  Ha a fizetés átmegy és a plan aktiválódik a dashboardon, minden működik. Jó videózást!

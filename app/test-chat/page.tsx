@@ -155,7 +155,7 @@ export default function TestChatPage() {
       <div className="max-w-7xl mx-auto">
         <div className="mb-8">
           <h1 className="text-3xl font-bold text-white mb-2">
-            🤖 Phase 3D: RAG Chat API Test
+            🤖 RAG Chat API Test
           </h1>
           <p className="text-gray-400">
             Test the complete RAG pipeline: Vector Search → Prompt Building →

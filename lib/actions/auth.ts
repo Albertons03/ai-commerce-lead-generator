@@ -209,7 +209,7 @@ export async function signOut(): Promise<ActionResponse> {
     }
 
     revalidatePath("/", "layout");
-    redirect("/login");
+    return { success: true };
   } catch (error) {
     console.error("Sign out action error:", error);
     return {

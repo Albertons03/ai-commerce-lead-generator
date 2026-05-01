@@ -29,7 +29,6 @@ const navigationItems = [
     name: 'Chatbot',
     href: '/chatbot',
     icon: MessageSquare,
-    badge: 'Phase 3',
   },
   {
     name: 'Settings',

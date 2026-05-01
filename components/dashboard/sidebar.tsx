@@ -117,14 +117,7 @@ export function Sidebar({ orgSlug, orgName, isOpen, onToggle }: SidebarProps) {
               >
                 <Icon className="h-5 w-5 flex-shrink-0" />
                 {!isCollapsed && (
-                  <>
-                    <span className="flex-1">{item.name}</span>
-                    {item.badge && (
-                      <span className="text-xs px-2 py-0.5 rounded-full bg-bg-tertiary text-gray-400 border border-border-primary">
-                        {item.badge}
-                      </span>
-                    )}
-                  </>
+                  <span className="flex-1">{item.name}</span>
                 )}
               </Link>
             )
